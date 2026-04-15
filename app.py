@@ -53,52 +53,6 @@ def init_db():
     ''')
     conn.execute('CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)')
 
-    # One-shot: replace galaga top row with SJH / 19770
-    if not conn.execute("SELECT 1 FROM migrations WHERE name='galaga_top_sjh_19770'").fetchone():
-        row = conn.execute("SELECT id FROM rankings WHERE game='galaga' ORDER BY score DESC, id ASC LIMIT 1").fetchone()
-        if row:
-            conn.execute("UPDATE rankings SET name='SJH', score=19770, level=1 WHERE id=?", (row[0],))
-        else:
-            conn.execute("INSERT INTO rankings (game, name, score, level) VALUES ('galaga', 'SJH', 19770, 1)")
-        conn.execute("INSERT INTO migrations (name) VALUES ('galaga_top_sjh_19770')")
-
-    # One-shot: rename game 'galaga' -> 'starwing'
-    if not conn.execute("SELECT 1 FROM migrations WHERE name='rename_galaga_to_starwing'").fetchone():
-        conn.execute("UPDATE rankings SET game='starwing' WHERE game='galaga'")
-        conn.execute("INSERT INTO migrations (name) VALUES ('rename_galaga_to_starwing')")
-
-    # One-shot: ensure starwing top rank is SJH / 19770 / level 11
-    if not conn.execute("SELECT 1 FROM migrations WHERE name='starwing_top_sjh_19770'").fetchone():
-        row = conn.execute("SELECT id FROM rankings WHERE game='starwing' ORDER BY score DESC, id ASC LIMIT 1").fetchone()
-        if row:
-            conn.execute("UPDATE rankings SET name='SJH', score=19770, level=11 WHERE id=?", (row[0],))
-        else:
-            conn.execute("INSERT INTO rankings (game, name, score, level) VALUES ('starwing', 'SJH', 19770, 11)")
-        conn.execute("INSERT INTO migrations (name) VALUES ('starwing_top_sjh_19770')")
-
-    # One-shot: rename hyperlane top rank to SJH
-    if not conn.execute("SELECT 1 FROM migrations WHERE name='hyperlane_top_name_sjh'").fetchone():
-        row = conn.execute("SELECT id FROM rankings WHERE game='hyperlane' ORDER BY score DESC, id ASC LIMIT 1").fetchone()
-        if row:
-            conn.execute("UPDATE rankings SET name='SJH' WHERE id=?", (row[0],))
-        conn.execute("INSERT INTO migrations (name) VALUES ('hyperlane_top_name_sjh')")
-
-    # One-shot: rename bloxfall top rank to SJH
-    if not conn.execute("SELECT 1 FROM migrations WHERE name='bloxfall_top_name_sjh'").fetchone():
-        row = conn.execute("SELECT id FROM rankings WHERE game='bloxfall' ORDER BY score DESC, id ASC LIMIT 1").fetchone()
-        if row:
-            conn.execute("UPDATE rankings SET name='SJH' WHERE id=?", (row[0],))
-        conn.execute("INSERT INTO migrations (name) VALUES ('bloxfall_top_name_sjh')")
-
-    # One-shot: keep only top-1 dungeon ranking, delete the rest
-    if not conn.execute("SELECT 1 FROM migrations WHERE name='dungeon_keep_top1_only'").fetchone():
-        row = conn.execute("SELECT id FROM rankings WHERE game='dungeon' ORDER BY score DESC, id ASC LIMIT 1").fetchone()
-        if row:
-            conn.execute("DELETE FROM rankings WHERE game='dungeon' AND id != ?", (row[0],))
-        else:
-            conn.execute("DELETE FROM rankings WHERE game='dungeon'")
-        conn.execute("INSERT INTO migrations (name) VALUES ('dungeon_keep_top1_only')")
-
     conn.commit()
     conn.close()
 
