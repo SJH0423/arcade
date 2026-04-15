@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>STARWING</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;touch-action:none;font-family:'Press Start 2P',monospace;display:flex;justify-content:center;align-items:center;height:100vh}
+canvas{display:block;width:800px;height:1000px;image-rendering:pixelated;image-rendering:crisp-edges}
+#touchUI{display:none;position:fixed;bottom:20px;left:0;right:0;z-index:100;padding:0 20px}
+.touch-row{display:flex;justify-content:space-between;align-items:center}
+.tbtn{width:70px;height:70px;border-radius:50%;border:2px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.08);color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;user-select:none}
+.tbtn:active{background:rgba(255,255,255,0.25)}
+.tbtn.fire{width:80px;height:80px;border-color:rgba(255,100,100,0.5);background:rgba(255,50,50,0.15);font-size:12px;font-family:'Press Start 2P',monospace}
+#backBtn{position:fixed;top:12px;left:12px;z-index:200;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#94a3b8;font-size:10px;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:'Press Start 2P',monospace;text-decoration:none}
+#backBtn:hover{background:rgba(255,255,255,0.15);color:#fff}
+@media(pointer:coarse){#touchUI{display:block}}
+</style>
+</head>
+<body>
+<a id="backBtn" href="../../index.html">MENU</a>
+<canvas id="game"></canvas>
+<div id="touchUI">
+<div class="touch-row">
+<div id="tLeft" class="tbtn">&#9664;</div>
+<div id="tFire" class="tbtn fire">FIRE</div>
+<div id="tRight" class="tbtn">&#9654;</div>
+</div>
+</div>
+
+<script>
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+
+const W=400,H=500,sc=1;
+const BW=400,BH=500;
+canvas.width=W;canvas.height=H;
+
+// Audio
+const AC=new(window.AudioContext||window.webkitAudioContext)();
+function snd(f,d,t,v){const o=AC.createOscillator(),g=AC.createGain();o.type=t||'square';o.frequency.value=f;g.gain.setValueAtTime(v||0.08,AC.currentTime);g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+d);o.connect(g);g.connect(AC.destination);o.start();o.stop(AC.currentTime+d);}
+function sfxShoot(){snd(880,0.08,'square',0.05)}
+function sfxHit(){snd(200,0.2,'sawtooth',0.07);setTimeout(()=>snd(120,0.3,'sawtooth',0.05),50)}
+function sfxDie(){snd(300,0.4,'sawtooth',0.1);setTimeout(()=>snd(150,0.5,'sawtooth',0.07),100)}
+function sfxBeam(){snd(600,0.15,'sine',0.04);snd(400,0.15,'sine',0.03)}
+function sfxCapture(){snd(500,0.3,'square',0.06);setTimeout(()=>snd(400,0.3,'square',0.05),100);setTimeout(()=>snd(300,0.4,'square',0.04),200)}
+function sfxRescue(){snd(523,0.1,'square',0.06);setTimeout(()=>snd(659,0.1,'square',0.06),80);setTimeout(()=>snd(784,0.15,'square',0.06),160);setTimeout(()=>snd(1047,0.2,'square',0.07),240)}
+
+let state='title',score=0,hi=0,lives=3,lvl=1;
+let pl=null,bul=[],ene=[],ebul=[],ptc=[],stars=[];
+let fmX=0,fmDir=1,fmSpd=0.3,diveT=0,diveI=120;
+let keys={},tL=false,tR=false,tF=false;
+
+// Tractor beam state
+let beam=null;
+let capturedShip=null;
+let fighters=1,prevFighters=1;
+function fighterOffsets(){return fighters===1?[0]:fighters===2?[0,30]:[-30,0,30];}
+function fighterBounds(){const o=fighterOffsets();return {l:Math.min(...o),r:Math.max(...o)};}
+
+// Ranking system
+const API_BASE=location.origin;
+let nameChars=['A','A','A'],namePos=0,nameBlinkT=0;
+let rankingData=[],rankingLoaded=false;
+let attractStartT=Date.now(),attract=true;
+const LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ';
+
+// --- Pixel sprite definitions ---
+const SHIP_SPRITE = [
+  '....W....',
+  '....W....',
+  '...WWW...',
+  '...WWW...',
+  '..WWWWW..',
+  '.WWRWRWW.',
+  '.WWWWWWW.',
+  'WWWWWWWWW',
+  'W.WBWBW.W',
+  'W..BWB..W',
+  '...B.B...',
+];
+const SHIP_COLORS = {W:'#ffffff',R:'#ff0000',B:'#4488ff'};
+
+// Captured ship (red tint version)
+const SHIP_CAPTURED_COLORS = {W:'#ff4444',R:'#ff0000',B:'#aa2222'};
+
+const ENE_BOSS = [
+  '...WW...',
+  '..BPPB..',
+  '.BPPPPB.',
+  '.PBWWBP.',
+  'BPWPPWPB',
+  'PPPPPPPP',
+  'P.BPPB.P',
+  '..P..P..',
+  '.P....P.',
+];
+const ENE_BOSS_C = {W:'#ffffff',B:'#4488ff',P:'#8844cc'};
+
+const ENE_BUTTER = [
+  '..RR..',
+  '.RBBR.',
+  '.RBBR.',
+  'RBYYBR',
+  'RBYYBR',
+  'RB..BR',
+  'R.RR.R',
+  '.R..R.',
+];
+const ENE_BUTTER_C = {R:'#ff0000',B:'#4488ff',Y:'#ffff00'};
+
+const ENE_BEE = [
+  '.RYYYR.',
+  '.YRRYY.',
+  'BYYYYBB',
+  'BBYRYBB',
+  '.BYYB..',
+  '.RBBR..',
+  'R.BB.R.',
+  '.R..R..',
+];
+const ENE_BEE_C = {R:'#ff0000',B:'#4488ff',Y:'#ffff00'};
+
+const ENE_SCORP = [
+  '..GG..',
+  '.GCCG.',
+  '.GCCG.',
+  'GCWWCG',
+  'GC..CG',
+  '.GCCG.',
+  '.G..G.',
+  'G....G',
+];
+const ENE_SCORP_C = {G:'#22cc55',C:'#00cccc',W:'#ffffff'};
+
+const ENE_ELITE = [
+  '..PP..',
+  '.PWWP.',
+  'PPRRPP',
+  'PRWWRP',
+  'PPRRPP',
+  '.PWWP.',
+  '.P..P.',
+  'P....P',
+];
+const ENE_ELITE_C = {P:'#aa55ff',W:'#ffffff',R:'#ff4444'};
+
+const ENE_SPRITES = [
+  {spr: ENE_BOSS, col: ENE_BOSS_C},
+  {spr: ENE_BUTTER, col: ENE_BUTTER_C},
+  {spr: ENE_BEE, col: ENE_BEE_C},
+  {spr: ENE_SCORP, col: ENE_SCORP_C},
+  {spr: ENE_ELITE, col: ENE_ELITE_C},
+];
+
+const spriteCache = {};
+function renderSprite(name, sprData, colorMap, pxSize) {
+  const key = name + '_' + pxSize;
+  if (spriteCache[key]) return spriteCache[key];
+  const rows = sprData.length;
+  const cols = sprData[0].length;
+  const oc = document.createElement('canvas');
+  oc.width = cols * pxSize;
+  oc.height = rows * pxSize;
+  const ox = oc.getContext('2d');
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const ch = sprData[r][c];
+      if (ch !== '.') {
+        ox.fillStyle = colorMap[ch] || '#fff';
+        ox.fillRect(c * pxSize, r * pxSize, pxSize, pxSize);
+      }
+    }
+  }
+  spriteCache[key] = oc;
+  return oc;
+}
+
+function initStars(){stars=[];for(let i=0;i<80;i++)stars.push({x:Math.random()*BW,y:Math.random()*BH,s:Math.random()*1.5+0.5,sp:Math.random()*0.5+0.15,c:['#ff4444','#4488ff','#ffff44','#44ff44','#ffffff','#ff88ff'][Math.floor(Math.random()*6)]});}
+
+function initGame(){
+  pl={x:BW/2,y:BH-45,w:30,h:30,cd:0,inv:0,captured:false};
+  bul=[];ebul=[];ptc=[];score=0;lives=3;lvl=1;
+  beam=null;capturedShip=null;fighters=1;prevFighters=1;
+  spawnWave();
+}
+
+function spawnWave(){
+  ene=[];
+  const rows=[
+    {y:55, n:10,hp:1,pt:50,type:0},
+    {y:85, n:10,hp:1,pt:40,type:1},
+    {y:115,n:10,hp:1,pt:30,type:2},
+    {y:145,n:8, hp:1,pt:20,type:3},
+  ];
+  if(lvl>=3)rows.push({y:175,n:6,hp:2,pt:80,type:4});
+  for(const r of rows){
+    const sp=40,sx=(BW-r.n*sp)/2+sp/2;
+    for(let i=0;i<r.n;i++){
+      ene.push({
+        fX:sx+i*sp,fY:r.y,x:sx+i*sp,y:-40-Math.random()*120,
+        w:26,h:24,hp:r.hp+Math.floor(lvl/3),mhp:r.hp+Math.floor(lvl/3),
+        pt:r.pt,type:r.type,ent:true,eSpd:1.5+Math.random()*0.5,
+        div:false,dPh:0,dSpd:2+lvl*0.2,dDir:Math.random()>0.5?1:-1,
+        dSX:0,aT:Math.random()*Math.PI*2,sCd:Math.floor(Math.random()*300)+100,
+        hasCaptured:false, // boss has a captured ship attached
+        beamCd:300+Math.floor(Math.random()*200) // cooldown before boss can beam
+      });
+    }
+  }
+  fmX=0;fmDir=1;fmSpd=0.3+lvl*0.05;diveI=Math.max(40,120-lvl*10);
+}
+
+function addPtc(x,y,c,n){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=Math.random()*3+1;ptc.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:30+Math.random()*20,ml:50,r:Math.random()*2.5+1,c});}}
+
+document.addEventListener('keydown',e=>{
+  keys[e.code]=true;
+  if(e.code==='Space') e.preventDefault();
+
+  if(state==='title'){
+    if(e.code==='Space'){state='playing';initGame();AC.resume();attract=false;attractStartT=Date.now();}
+  }
+  else if(state==='gameover'){
+    // Name entry: left/right to move cursor, up/down to change letter, enter to confirm
+    if(e.code==='ArrowLeft'||e.code==='KeyA'){namePos=Math.max(0,namePos-1);snd(800,0.05,'square',0.03);}
+    else if(e.code==='ArrowRight'||e.code==='KeyD'){namePos=Math.min(2,namePos+1);snd(800,0.05,'square',0.03);}
+    else if(e.code==='ArrowUp'||e.code==='KeyW'){
+      let idx=LETTERS.indexOf(nameChars[namePos]);
+      idx=(idx+1)%LETTERS.length;
+      nameChars[namePos]=LETTERS[idx];
+      snd(600,0.05,'square',0.03);
+    }
+    else if(e.code==='ArrowDown'||e.code==='KeyS'){
+      let idx=LETTERS.indexOf(nameChars[namePos]);
+      idx=(idx-1+LETTERS.length)%LETTERS.length;
+      nameChars[namePos]=LETTERS[idx];
+      snd(600,0.05,'square',0.03);
+    }
+    else if(e.code==='Enter'){
+      submitScore();
+    }
+  }
+  else if(state==='ranking'){
+    if(e.code==='Space'||e.code==='Enter'){state='playing';initGame();AC.resume();attract=false;attractStartT=Date.now();}
+  }
+});
+document.addEventListener('keyup',e=>{keys[e.code]=false});
+
+function addT(el,dn,up){el.addEventListener('touchstart',e=>{e.preventDefault();dn()},{passive:false});el.addEventListener('touchend',e=>{e.preventDefault();up()},{passive:false});el.addEventListener('touchcancel',()=>up());}
+addT(document.getElementById('tLeft'),()=>{tL=true},()=>{tL=false});
+addT(document.getElementById('tRight'),()=>{tR=true},()=>{tR=false});
+addT(document.getElementById('tFire'),()=>{tF=true;if(state==='title'||state==='ranking'){state='playing';initGame();AC.resume();attract=false;attractStartT=Date.now();}else if(state==='gameover'){submitScore();}},()=>{tF=false});
+canvas.addEventListener('touchstart',()=>{if(state==='title'||state==='ranking'){state='playing';initGame();AC.resume();attract=false;attractStartT=Date.now();}},{passive:true});
+
+function update(){
+  for(const s of stars){s.y+=s.sp;if(s.y>BH){s.y=0;s.x=Math.random()*BW;}}
+  // Attract mode: auto-rotate title <-> ranking every 3 seconds
+  if(attract){
+    if(state==='title'){
+      if(Date.now()-attractStartT>=3000){attractStartT=Date.now();state='ranking';fetchRanking();}
+    }
+    else if(state==='ranking'){
+      if(Date.now()-attractStartT>=3000){attractStartT=Date.now();state='title';}
+    }
+  }
+  // Post-gameover ranking: auto-return to title after 5 seconds
+  else if(state==='ranking'){
+    if(Date.now()-attractStartT>=3000){attractStartT=Date.now();state='title';attract=true;}
+  }
+  if(state!=='playing'){
+    // Keep particles updating in gameover for visual effect
+    if(state==='gameover'||state==='ranking'){
+      for(let i=ptc.length-1;i>=0;i--){const t=ptc[i];t.x+=t.vx;t.y+=t.vy;t.vx*=0.97;t.vy*=0.97;t.life--;if(t.life<=0)ptc.splice(i,1);}
+    }
+    return;
+  }
+
+  const p=pl;
+
+  // --- Tractor beam update ---
+  if(beam){
+    beam.timer++;
+    const boss=beam.boss;
+
+    if(beam.phase===0){
+      // Phase 0: Boss diving down to beam position
+      // Boss is already diving via normal dive logic, wait until near player Y area
+      if(boss.y > BH*0.5){
+        beam.phase=1;beam.timer=0;
+        boss.div=false; // stop dive, hover in place
+        boss.beamY=boss.y; // lock Y position
+        boss.beamX=boss.x;
+        sfxBeam();
+      }
+    }
+    else if(beam.phase===1){
+      // Phase 1: Beam expanding - triangle of light growing downward
+      boss.x=boss.beamX; boss.y=boss.beamY; // lock boss position
+      beam.height=Math.min(BH-boss.y-30, beam.timer*3);
+      beam.width=beam.height*0.7;
+
+      // Sound pulses
+      if(beam.timer%10===0) sfxBeam();
+
+      // Check if player is in the beam
+      if(!beam.capturing && p.inv<=0 && !p.captured){
+        const bx=boss.x, by=boss.y;
+        const beamTop=by+12;
+        const beamBot=by+12+beam.height;
+        const halfW=beam.width/2;
+        if(p.y > beamTop && p.y < beamBot){
+          const ratio=(p.y-beamTop)/beam.height;
+          const widthAtPlayer=halfW*ratio;
+          if(Math.abs(p.x-bx)<widthAtPlayer){
+            beam.capturing=true;
+            beam.captureStartY=p.y;
+          }
+        }
+      }
+
+      // Pull player up if capturing
+      if(beam.capturing && !p.captured){
+        p.x+=(beam.boss.x-p.x)*0.05; // center player under boss
+        p.y-=1.5; // pull upward
+        if(p.y <= boss.y+30){
+          // Captured!
+          p.captured=true;
+          sfxCapture();
+          boss.hasCaptured=true;
+          capturedShip={attachedTo:boss, offY:30};
+          prevFighters=fighters;fighters=1;
+          lives--;
+          if(lives<=0){
+            state='gameover';
+            beam=null;
+            return;
+          }
+          // Reset player
+          p.x=BW/2; p.y=BH-45; p.inv=120; p.captured=false;
+          beam.phase=2; beam.timer=0;
+        }
+      }
+
+      // Beam max duration without capture
+      if(beam.timer>180 && !beam.capturing){
+        beam.phase=2; beam.timer=0;
+      }
+    }
+    else if(beam.phase===2){
+      // Phase 2: Beam retracting
+      beam.height=Math.max(0, beam.height-5);
+      if(beam.height<=0){
+        beam.phase=3; beam.timer=0;
+      }
+      boss.x=boss.beamX; boss.y=boss.beamY;
+    }
+    else if(beam.phase===3){
+      // Phase 3: Boss returns to formation
+      const tx=boss.fX+fmX, ty=boss.fY;
+      boss.x+=(tx-boss.x)*0.03;
+      boss.y+=(ty-boss.y)*0.03;
+      if(Math.abs(boss.x-tx)<2 && Math.abs(boss.y-ty)<2){
+        boss.x=tx; boss.y=ty;
+        boss.div=false;
+        beam=null;
+      }
+    }
+  }
+
+  // Player movement (disabled during capture)
+  if(!beam || !beam.capturing || pl.captured){
+    if(keys['ArrowLeft']||keys['KeyA']||tL)p.x-=4;
+    if(keys['ArrowRight']||keys['KeyD']||tR)p.x+=4;
+    const _fb=fighterBounds();p.x=Math.max(p.w/2-_fb.l,Math.min(BW-p.w/2-_fb.r,p.x));
+  }
+  if(p.cd>0)p.cd--;
+  if(p.inv>0)p.inv--;
+
+  // Shooting (dual fighter shoots 2 bullets)
+  if((keys['Space']||tF)&&p.cd<=0 && !(beam && beam.capturing && !p.captured)){
+    for(const off of fighterOffsets()) bul.push({x:p.x+off,y:p.y-p.h/2,vy:-7,w:3,h:12});
+    p.cd=12;sfxShoot();
+  }
+
+  for(let i=bul.length-1;i>=0;i--){bul[i].y+=bul[i].vy;if(bul[i].y<-10)bul.splice(i,1);}
+
+  fmX+=fmSpd*fmDir;
+  let mnX=999,mxX=-999;
+  for(const e of ene){if(!e.div&&!e.ent){const ex=e.fX+fmX;if(ex<mnX)mnX=ex;if(ex>mxX)mxX=ex;}}
+  if(mnX<20)fmDir=1;if(mxX>BW-20)fmDir=-1;
+
+  // Dive timer - also trigger beam for boss enemies
+  diveT++;
+  if(diveT>=diveI){
+    diveT=0;
+    const al=ene.filter(e=>!e.div&&!e.ent);
+    if(al.length>0){
+      const d=al[Math.floor(Math.random()*al.length)];
+      d.div=true;d.dPh=0;d.dSX=d.x;
+
+      // Boss with no active beam: chance to do tractor beam
+      if(d.type===0 && !beam && !d.hasCaptured && !capturedShip){
+        d.beamCd--;
+        if(d.beamCd<=0 && Math.random()<0.4){
+          beam={boss:d, phase:0, timer:0, width:0, height:0, capturing:false};
+        }
+      }
+    }
+  }
+
+  // Boss beam cooldown tick for all bosses
+  for(const e of ene){
+    if(e.type===0 && e.beamCd>0) e.beamCd--;
+  }
+
+  for(let i=ene.length-1;i>=0;i--){
+    const e=ene[i];e.aT+=0.05;
+
+    // Skip movement if boss is beaming (handled by beam logic)
+    if(beam && beam.boss===e && beam.phase>=1 && beam.phase<=2){
+      // Boss locked in place by beam logic
+    }
+    else if(e.ent){e.y+=e.eSpd;e.x=e.fX+fmX;if(e.y>=e.fY){e.y=e.fY;e.ent=false;}}
+    else if(e.div){
+      e.dPh+=0.015;
+      if(e.dPh<0.5){const t=e.dPh*2;e.x=e.dSX+Math.sin(t*Math.PI*2)*40*e.dDir;e.y=e.fY+t*(BH+40-e.fY);}
+      else if(e.dPh<1){e.y+=e.dSpd;e.x+=Math.sin(e.aT*3)*1.5;if(e.y>BH+30){e.y=-30;e.dPh=1;}}
+      else{const t2=Math.min(1,(e.dPh-1)*3);e.x=e.fX+fmX;e.y=-20+t2*(e.fY+20);if(t2>=1){e.div=false;e.y=e.fY;}e.dPh+=0.015;}
+    }else{e.x=e.fX+fmX;e.y=e.fY+Math.sin(e.aT)*3;}
+
+    // Update captured ship position
+    if(capturedShip && capturedShip.attachedTo===e){
+      capturedShip.x=e.x;
+      capturedShip.y=e.y+capturedShip.offY;
+    }
+
+    e.sCd--;
+    if(e.sCd<=0&&(e.div||Math.random()<0.002)){
+      // Don't shoot while beaming
+      if(!(beam && beam.boss===e)){
+        const dx=p.x-e.x,dy=p.y-e.y,d=Math.sqrt(dx*dx+dy*dy)||1;
+        ebul.push({x:e.x,y:e.y+e.h/2,vx:dx/d*2.5,vy:dy/d*2.5,w:5,h:5});
+      }
+      e.sCd=Math.floor(Math.random()*200)+80;
+    }
+
+    // Bullet vs enemy collision
+    for(let j=bul.length-1;j>=0;j--){
+      const b=bul[j];
+      if(Math.abs(b.x-e.x)<(b.w+e.w)/2&&Math.abs(b.y-e.y)<(b.h+e.h)/2){
+        bul.splice(j,1);e.hp--;
+        if(e.hp<=0){
+          score+=e.pt*(e.div?2:1);addPtc(e.x,e.y,'#ff4444',18);sfxHit();
+
+          // If this boss had a captured ship, release it
+          if(capturedShip && capturedShip.attachedTo===e){
+            // Captured ship becomes rescuable - fly down to player
+            capturedShip.released=true;
+            capturedShip.vy=2;
+          }
+
+          // If boss is beaming, cancel beam
+          if(beam && beam.boss===e) beam=null;
+
+          ene.splice(i,1);
+        }
+        else{addPtc(e.x,e.y,'#fff',6);snd(400,0.05,'square',0.03);}
+        break;
+      }
+    }
+  }
+
+  // Check bullet vs captured ship (to rescue it, shoot the captured ship itself)
+  if(capturedShip && !capturedShip.released){
+    for(let j=bul.length-1;j>=0;j--){
+      const b=bul[j];
+      if(Math.abs(b.x-capturedShip.x)<15&&Math.abs(b.y-capturedShip.y)<15){
+        // Don't destroy — kill the boss to free the captured ship
+        break;
+      }
+    }
+  }
+
+  // Released captured ship flies down to join player
+  if(capturedShip && capturedShip.released){
+    capturedShip.y+=capturedShip.vy;
+    capturedShip.x+=(p.x-capturedShip.x)*0.03;
+
+    // Reached player level - merge into dual fighter!
+    if(capturedShip.y >= p.y-5){
+      fighters=Math.min(3,prevFighters+1);prevFighters=1;
+      capturedShip=null;
+      sfxRescue();
+      score+=1000;
+      // Flash effect
+      for(const off of fighterOffsets()) addPtc(p.x+off,p.y,'#ffff00',25);
+    }
+  }
+
+  for(let i=ebul.length-1;i>=0;i--){
+    const b=ebul[i];b.x+=b.vx;b.y+=b.vy;
+    if(b.y>BH+10||b.y<-10||b.x<-10||b.x>BW+10){ebul.splice(i,1);continue;}
+    if(p.inv<=0){
+      let hitIdx=-1;const offs=fighterOffsets();
+      for(let k=0;k<offs.length;k++){
+        if(Math.abs(b.x-(p.x+offs[k]))<(b.w+p.w)/2*0.7&&Math.abs(b.y-p.y)<(b.h+p.h)/2*0.7){hitIdx=k;break;}
+      }
+      if(hitIdx>=0){
+        ebul.splice(i,1);
+        if(fighters===1){pHit();}
+        else{addPtc(p.x+offs[hitIdx],p.y,'#ff4444',20);sfxDie();fighters--;prevFighters=1;}
+      }
+    }
+  }
+
+  if(p.inv<=0)for(const e of ene){if(Math.abs(e.x-p.x)<(e.w+p.w)/2*0.7&&Math.abs(e.y-p.y)<(e.h+p.h)/2*0.7){pHit();break;}}
+
+  for(let i=ptc.length-1;i>=0;i--){const t=ptc[i];t.x+=t.vx;t.y+=t.vy;t.vx*=0.97;t.vy*=0.97;t.life--;if(t.life<=0)ptc.splice(i,1);}
+
+  if(ene.length===0){lvl++;spawnWave();}
+  if(score>hi){hi=score;localStorage.setItem('sHi',hi);}
+}
+
+function pHit(){
+  lives--;fighters=1;prevFighters=1;
+  addPtc(pl.x,pl.y,'#ff4444',30);sfxDie();
+  if(lives<=0){state='gameover';nameChars=['A','A','A'];namePos=0;}
+  else{pl.inv=120;pl.x=BW/2;pl.y=BH-45;}
+}
+
+// --- Ranking API ---
+function fetchRanking(){
+  fetch(API_BASE+'/api/ranking/starwing').then(r=>r.json()).then(d=>{
+    rankingData=d;rankingLoaded=true;
+    if(d.length>0) hi=Math.max(hi, d[0].score);
+  }).catch(()=>{
+    rankingData=JSON.parse(localStorage.getItem('sRank')||'[]');rankingLoaded=true;
+    if(rankingData.length>0) hi=Math.max(hi, rankingData[0].score);
+  });
+}
+function submitScore(){
+  const name=nameChars.join('');
+  const body={name,score,level:lvl};
+  state='ranking';attract=false;attractStartT=Date.now();
+  fetch(API_BASE+'/api/ranking/starwing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(r=>r.json()).then(d=>{rankingData=d;rankingLoaded=true;if(d.length>0)hi=Math.max(hi,d[0].score);})
+    .catch(()=>{
+      // Fallback: save to localStorage
+      let local=JSON.parse(localStorage.getItem('sRank')||'[]');
+      local.push({name,score,level:lvl});local.sort((a,b)=>b.score-a.score);local=local.slice(0,10);
+      localStorage.setItem('sRank',JSON.stringify(local));
+      rankingData=local;rankingLoaded=true;
+    });
+}
+fetchRanking();
+
+// --- Draw pixel ship ---
+function drawShip(x, y, size, colors) {
+  const px = size || 3;
+  const col = colors || SHIP_COLORS;
+  const spr = SHIP_SPRITE;
+  const cols = spr[0].length;
+  const rows = spr.length;
+  const offX = (cols * px) / 2;
+  const offY = (rows * px) / 2;
+  const cacheKey = colors === SHIP_CAPTURED_COLORS ? 'ship_cap' : 'ship';
+  const cached = renderSprite(cacheKey, spr, col, px);
+  ctx.drawImage(cached, (x - offX / sc) * sc, (y - offY / sc) * sc, cols * px, rows * px);
+}
+
+// --- Draw pixel enemy ---
+function drawEne(e) {
+  const data = ENE_SPRITES[e.type] || ENE_SPRITES[1];
+  const spr = data.spr;
+  const colorMap = data.col;
+  const px = 3;
+  const cols = spr[0].length;
+  const rows = spr.length;
+  const w = cols * px;
+  const h = rows * px;
+
+  const cached = renderSprite('ene_' + e.type, spr, colorMap, px);
+  ctx.drawImage(cached, (e.x * sc) - w / 2, (e.y * sc) - h / 2, w, h);
+
+  if (e.mhp > 1) {
+    const bw = w;
+    const bx = (e.x * sc) - bw / 2;
+    const by = (e.y * sc) - h / 2 - 5;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(bx, by, bw, 3);
+    ctx.fillStyle = '#4ade80';
+    ctx.fillRect(bx, by, bw * (e.hp / e.mhp), 3);
+  }
+}
+
+// --- Draw tractor beam ---
+function drawBeam(){
+  if(!beam || beam.phase<1 || beam.phase>2 || beam.height<=0) return;
+
+  const boss=beam.boss;
+  const bx=boss.x*sc, by=(boss.y+12)*sc;
+  const bh=beam.height*sc;
+  const bw=beam.width*sc;
+  const time=performance.now()*0.003;
+
+  // Draw beam as horizontal scan lines
+  const lineSpacing=4*sc;
+  const numLines=Math.floor(bh/lineSpacing);
+
+  for(let i=0;i<numLines;i++){
+    const ratio=i/numLines;
+    const ly=by+i*lineSpacing;
+    const halfW=(bw/2)*ratio;
+
+    // Alternating cyan/teal colors with wave animation
+    const wave=Math.sin(time+i*0.5)*0.3;
+    const alpha=0.5+wave;
+
+    ctx.strokeStyle=i%2===0
+      ? `rgba(0,230,255,${Math.max(0.2,alpha)})`
+      : `rgba(0,180,200,${Math.max(0.15,alpha*0.7)})`;
+    ctx.lineWidth=2*sc;
+
+    ctx.beginPath();
+    ctx.moveTo(bx-halfW, ly);
+    ctx.lineTo(bx+halfW, ly);
+    ctx.stroke();
+  }
+
+  // Outer glow edges
+  ctx.strokeStyle='rgba(0,230,255,0.15)';
+  ctx.lineWidth=1*sc;
+  ctx.beginPath();
+  ctx.moveTo(bx, by);
+  ctx.lineTo(bx-bw/2, by+bh);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(bx, by);
+  ctx.lineTo(bx+bw/2, by+bh);
+  ctx.stroke();
+}
+
+function draw(){
+  ctx.fillStyle='#000000';ctx.fillRect(0,0,W,H);
+
+  for(const s of stars){
+    ctx.fillStyle=s.c;
+    ctx.globalAlpha=0.4+Math.sin(s.y*0.03+performance.now()*0.001)*0.3;
+    ctx.fillRect(s.x*sc,s.y*sc,s.s*sc,s.s*sc);
+  }
+  ctx.globalAlpha=1;
+
+  if(state==='title'){
+    ctx.textAlign='center';
+    ctx.fillStyle='#ff0000';ctx.font=`${32*sc}px "Press Start 2P"`;ctx.fillText('STARWING',W/2,H*0.25);
+    ctx.fillStyle='#ffffff';ctx.font=`${8*sc}px "Press Start 2P"`;
+    ctx.fillText('PRESS SPACE OR TAP',W/2,H*0.38);
+    ctx.fillText('TO START',W/2,H*0.38+18*sc);
+    ctx.fillStyle='#6688aa';ctx.font=`${7*sc}px "Press Start 2P"`;
+    ctx.fillText('ARROWS/AD: MOVE',W/2,H*0.50);
+    ctx.fillText('SPACE: FIRE',W/2,H*0.50+16*sc);
+    ctx.fillStyle='#ff0000';ctx.font=`${7*sc}px "Press Start 2P"`;
+    ctx.fillText(`HI-SCORE ${hi}`,W/2,H*0.56);
+
+    const demoTypes = [0,1,2,3];
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 4; c++) {
+        const dx = BW/2 - 60 + c * 40;
+        const dy = BH * 0.68 + r * 32;
+        const data = ENE_SPRITES[demoTypes[r]];
+        const spr = data.spr;
+        const px = 3;
+        const cols = spr[0].length;
+        const rows = spr.length;
+        const w = cols * px;
+        const h = rows * px;
+        const cached = renderSprite('ene_' + demoTypes[r], spr, data.col, px);
+        ctx.drawImage(cached, dx * sc - w / 2, dy * sc - h / 2, w, h);
+      }
+    }
+    drawShip(BW/2, BH*0.68 - 32);
+    return;
+  }
+
+  // Tractor beam (draw behind everything)
+  drawBeam();
+
+  // Player (+ dual fighter)
+  if(state==='playing'&&(pl.inv<=0||Math.floor(pl.inv/4)%2===0)){
+    // During capture animation, player is being pulled up
+    if(beam && beam.capturing && !pl.captured){
+      drawShip(pl.x, pl.y);
+    } else {
+      for(const off of fighterOffsets()) drawShip(pl.x+off, pl.y);
+    }
+  }
+
+  // Player bullets
+  ctx.fillStyle='#ffffff';
+  for(const b of bul){
+    ctx.fillRect((b.x-1)*sc,(b.y-b.h/2)*sc,2*sc,b.h*sc);
+  }
+
+  // Enemies
+  for(const e of ene)drawEne(e);
+
+  // Captured ship (red tinted, attached to boss or flying down)
+  if(capturedShip){
+    drawShip(capturedShip.x, capturedShip.y, 3, SHIP_CAPTURED_COLORS);
+  }
+
+  // Enemy bullets
+  for(const b of ebul){
+    ctx.fillStyle='#ff4444';
+    ctx.fillRect((b.x-2)*sc,(b.y-2)*sc,4*sc,4*sc);
+    ctx.fillStyle='#ffaaaa';
+    ctx.fillRect((b.x-1)*sc,(b.y-1)*sc,2*sc,2*sc);
+  }
+
+  // Particles
+  for(const t of ptc){ctx.globalAlpha=t.life/t.ml;ctx.fillStyle=t.c;ctx.beginPath();ctx.arc(t.x*sc,t.y*sc,t.r*sc*(t.life/t.ml),0,Math.PI*2);ctx.fill();}
+  ctx.globalAlpha=1;
+
+  // HUD
+  ctx.textAlign='left';
+  ctx.fillStyle='#ff0000';ctx.font=`${9*sc}px "Press Start 2P"`;ctx.fillText('1UP',10*sc,18*sc);
+  ctx.fillStyle='#ffffff';ctx.fillText(`${score}`,10*sc,34*sc);
+  ctx.textAlign='right';
+  ctx.fillStyle='#ff0000';ctx.fillText(`HI`,W-10*sc,18*sc);
+  ctx.fillStyle='#ffffff';ctx.fillText(`${hi}`,W-10*sc,34*sc);
+
+  // Lives icons (reserves only — exclude ship currently in play)
+  for(let i=0;i<lives-1;i++){
+    const cached = renderSprite('ship', SHIP_SPRITE, SHIP_COLORS, 2);
+    ctx.drawImage(cached, (14 + i * 22) * sc, (BH - 28) * sc, SHIP_SPRITE[0].length * 2, SHIP_SPRITE.length * 2);
+  }
+
+  // Level flags
+  ctx.fillStyle='#ff0000';
+  for(let i=0;i<Math.min(lvl,10);i++){
+    const fx=(BW-18-i*16)*sc, fy=(BH-24)*sc;
+    ctx.fillRect(fx,fy,10*sc,8*sc);
+    ctx.fillStyle='#ffffff';
+    ctx.fillRect(fx-2*sc,fy,2*sc,14*sc);
+    ctx.fillStyle='#ff0000';
+  }
+
+  // Fighter indicator
+  if(fighters>1){
+    ctx.textAlign='center';
+    ctx.fillStyle='#ffff00';ctx.font=`${6*sc}px "Press Start 2P"`;
+    ctx.fillText(fighters===3?'TRIPLE FIGHTER':'DUAL FIGHTER',W/2,(BH-8)*sc);
+  }
+
+  // Game Over - Name Entry
+  if(state==='gameover'){
+    ctx.fillStyle='rgba(0,0,0,0.8)';ctx.fillRect(0,0,W,H);
+    ctx.textAlign='center';
+    ctx.fillStyle='#ff0000';ctx.font=`${18*sc}px "Press Start 2P"`;ctx.fillText('GAME OVER',W/2,H*0.2);
+    ctx.fillStyle='#ffffff';ctx.font=`${10*sc}px "Press Start 2P"`;ctx.fillText(`SCORE ${score}`,W/2,H*0.3);
+    if(score>=hi){ctx.fillStyle='#ffff00';ctx.font=`${7*sc}px "Press Start 2P"`;ctx.fillText('NEW HIGH SCORE!',W/2,H*0.36);}
+
+    // Name entry
+    ctx.fillStyle='#00e5ff';ctx.font=`${8*sc}px "Press Start 2P"`;
+    ctx.fillText('ENTER YOUR NAME',W/2,H*0.46);
+
+    nameBlinkT++;
+    const fs=20*sc;
+    ctx.font=`${fs}px "Press Start 2P"`;
+    const spacing=fs*1.2;
+    const startX=W/2-spacing;
+
+    for(let i=0;i<3;i++){
+      const cx=startX+i*spacing;
+      const isActive=i===namePos;
+      // Up arrow
+      if(isActive){
+        ctx.fillStyle='#ffff00';
+        ctx.font=`${8*sc}px "Press Start 2P"`;
+        ctx.fillText('\u25B2',cx,H*0.52);
+      }
+      // Letter
+      ctx.font=`${fs}px "Press Start 2P"`;
+      if(isActive && Math.floor(nameBlinkT/15)%2===0){
+        ctx.fillStyle='#ffff00';
+      }else{
+        ctx.fillStyle='#ffffff';
+      }
+      ctx.fillText(nameChars[i],cx,H*0.62);
+      // Down arrow
+      if(isActive){
+        ctx.fillStyle='#ffff00';
+        ctx.font=`${8*sc}px "Press Start 2P"`;
+        ctx.fillText('\u25BC',cx,H*0.69);
+      }
+      // Underline
+      ctx.fillStyle=isActive?'#ffff00':'#666666';
+      ctx.fillRect(cx-fs*0.4,H*0.64,fs*0.8,2);
+    }
+
+    ctx.fillStyle='#6688aa';ctx.font=`${6*sc}px "Press Start 2P"`;
+    ctx.fillText('ARROWS:SELECT  ENTER:OK',W/2,H*0.82);
+
+    // Show current top 3 preview
+    if(rankingData.length>0){
+      ctx.fillStyle='#888888';ctx.font=`${5*sc}px "Press Start 2P"`;
+      ctx.fillText('TOP SCORES',W/2,H*0.90);
+      for(let i=0;i<Math.min(3,rankingData.length);i++){
+        const r=rankingData[i];
+        ctx.fillText(`${i+1}. ${r.name} ${r.score}`,W/2,H*0.94+i*10*sc);
+      }
+    }
+  }
+
+  // Ranking Board
+  if(state==='ranking'){
+    ctx.fillStyle='rgba(0,0,0,0.9)';ctx.fillRect(0,0,W,H);
+    ctx.textAlign='center';
+
+    ctx.fillStyle='#ffff00';ctx.font=`${14*sc}px "Press Start 2P"`;
+    ctx.fillText('TOP 10',W/2,H*0.1);
+
+    ctx.textAlign='left';
+    ctx.fillStyle='#ff0000';ctx.font=`${6*sc}px "Press Start 2P"`;
+    ctx.fillText('RANK',W*0.10,H*0.17);
+    ctx.fillText('NAME',W*0.28,H*0.17);
+    ctx.fillText('SCORE',W*0.48,H*0.17);
+    ctx.fillText('LV',W*0.82,H*0.17);
+
+    const yourName=nameChars.join('');
+    let yourRank=-1;
+
+    for(let i=0;i<Math.min(10,rankingData.length);i++){
+      const r=rankingData[i];
+      const y=H*0.22+i*26*sc;
+      const isYou=(r.name===yourName && r.score===score && yourRank<0);
+      if(isYou) yourRank=i;
+
+      // Rank number
+      ctx.fillStyle=isYou?'#ffff00':(i<3?'#ff4444':'#aaaaaa');
+      ctx.font=`${9*sc}px "Press Start 2P"`;
+      const rankStr=String(i+1).padStart(2,' ');
+      ctx.fillText(rankStr, W*0.10, y);
+      // Name
+      ctx.fillStyle=isYou?'#ffff00':(i===0?'#ffff00':(i<3?'#ffee66':'#ffffff'));
+      ctx.font=`${10*sc}px "Press Start 2P"`;
+      ctx.fillText(r.name, W*0.28, y);
+      // Score
+      ctx.fillStyle=isYou?'#ffff00':'#ffffff';
+      ctx.font=`${9*sc}px "Press Start 2P"`;
+      ctx.fillText(String(r.score).padStart(6,' '), W*0.48, y);
+      // Level
+      ctx.fillStyle=isYou?'#ffff00':'#888888';
+      ctx.font=`${9*sc}px "Press Start 2P"`;
+      ctx.fillText(String(r.level||1).padStart(2,' '), W*0.82, y);
+    }
+
+    if(rankingData.length===0){
+      ctx.textAlign='center';
+      ctx.fillStyle='#666666';ctx.font=`${7*sc}px "Press Start 2P"`;
+      ctx.fillText('NO RECORDS YET',W/2,H*0.5);
+    }
+
+    ctx.textAlign='center';
+    ctx.fillStyle='#6688aa';ctx.font=`${6*sc}px "Press Start 2P"`;
+    ctx.fillText('PRESS SPACE TO CONTINUE',W/2,H*0.92);
+  }
+}
+
+function loop(){update();draw();requestAnimationFrame(loop);}
+initStars();loop();
+</script>
+</body>
+</html>

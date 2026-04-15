@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>DUNGEON</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box
+    }
+
+    body {
+      background: #000;
+      overflow: hidden;
+      touch-action: none;
+      font-family: 'Press Start 2P', monospace;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh
+    }
+
+    canvas {
+      display: block;
+      width: 800px;
+      height: 600px;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges
+    }
+
+    #touchUI {
+      display: none;
+      position: fixed;
+      bottom: 20px;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 0 16px
+    }
+
+    .touch-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center
+    }
+
+    .tbtn {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none
+    }
+
+    .tbtn.fire {
+      width: 64px;
+      height: 64px;
+      border-color: rgba(255, 100, 100, 0.5);
+      background: rgba(255, 50, 50, 0.15);
+      font-size: 9px;
+      font-family: 'Press Start 2P', monospace
+    }
+
+    .tbtn:active {
+      background: rgba(255, 255, 255, 0.25)
+    }
+
+    #backBtn {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 200;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #94a3b8;
+      font-size: 10px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: 'Press Start 2P', monospace;
+      text-decoration: none
+    }
+
+    #backBtn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff
+    }
+
+    @media(pointer:coarse) {
+      #touchUI {
+        display: block
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <a id="backBtn" href="../../index.html">MENU</a>
+  <canvas id="game"></canvas>
+  <div id="touchUI">
+    <div class="touch-row">
+      <div id="tLeft" class="tbtn">&#8634;</div>
+      <div id="tFwd" class="tbtn">&#9650;</div>
+      <div id="tFire" class="tbtn fire">FIRE</div>
+      <div id="tBack" class="tbtn">&#9660;</div>
+      <div id="tRight" class="tbtn">&#8635;</div>
+    </div>
+  </div>
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    const W = 400, H = 300;
+    canvas.width = W; canvas.height = H;
+    const FOV = Math.PI / 3;
+
+    // Maps (each row is a string; # wall, . empty)
+    const MAPS = [
+      [
+        "################",
+        "#..............#",
+        "#.####..####...#",
+        "#.#........#...#",
+        "#.#..####..#...#",
+        "#....#..#......#",
+        "###..#..####...#",
+        "#....#......#..#",
+        "#.####..##..#..#",
+        "#.#.....#....#.#",
+        "#.#.###.#....#.#",
+        "#...#...#......#",
+        "#####...########",
+        "#........#D....#",
+        "#........#.....#",
+        "#........#.....#",
+        "#..............#",
+        "################",
+      ],
+      [
+        "################",
+        "#..#........#..#",
+        "#..#.####.#.#..#",
+        "#....#......#..#",
+        "####.#.###..#..#",
+        "#....#.#.......#",
+        "#.####.#.#######",
+        "#......#.......#",
+        "###.####.####..#",
+        "#..............#",
+        "########..######",
+        "#......#.......#",
+        "#..#...#####...#",
+        "#..#D##........#",
+        "#...#...#####..#",
+        "#......##......#",
+        "#..............#",
+        "################",
+      ],
+      [
+        "################",
+        "#..............#",
+        "#..............#",
+        "#..............#",
+        "#..............#",
+        "#..............#",
+        "#..............#",
+        "#..............#",
+        "#..............#",
+        "#.......B......#",
+        "#..............#",
+        "#..............#",
+        "#..............#",
+        "#..............#",
+        "#..............#",
+        "#..............#",
+        "#..............#",
+        "################",
+      ],
+    ];
+    const MAP_W = 16, MAP_H = 18;
+    let MAP;
+
+    let state = 'title';
+    let score = 0, lives = 3, lvl = 1;
+    let elapsed = 0; // frames of active play — lower = better
+    const TIME_MAX = 99999; // inverted-score cap for DB DESC sort
+    let ammo = 30;
+    let hi = 0;
+    let rankingData = [], rankingLoaded = false;
+    let nameChars = ['A', 'A', 'A'], namePos = 0, nameBlinkT = 0;
+    let attractStartT = Date.now(), attract = true;
+
+    // Player
+    let px = 1.5, py = 1.5, pa = 0; // position + angle
+    let moveF = 0, rotL = 0;
+    let gunCd = 0, gunKick = 0, inv = 0;
+    let ene = [];
+    let pickups = []; // {x,y,kind:'ammo'|'health', taken}
+    let damageFlash = 0;
+    let msgT = 0, msgText = '';
+
+    // --- Procedural wall textures (Doom-inspired brick) ---
+    const TEX_SIZE = 64;
+    function makeBrickTex(base, mortar, highlight) {
+      const c = document.createElement('canvas');
+      c.width = c.height = TEX_SIZE;
+      const g = c.getContext('2d');
+      g.fillStyle = base; g.fillRect(0, 0, TEX_SIZE, TEX_SIZE);
+      const bh = 12, bw = 22;
+      g.fillStyle = mortar;
+      for (let y = 0; y < TEX_SIZE; y += bh) {
+        g.fillRect(0, y, TEX_SIZE, 1);
+        const off = ((y / bh) | 0) % 2 === 0 ? 0 : bw / 2;
+        for (let x = off; x < TEX_SIZE; x += bw) { g.fillRect(x, y, 1, bh); }
+      }
+      // Random dark speckles (weathering)
+      for (let i = 0; i < 80; i++) {
+        const sx = Math.floor(Math.random() * TEX_SIZE);
+        const sy = Math.floor(Math.random() * TEX_SIZE);
+        g.fillStyle = `rgba(0,0,0,${Math.random() * 0.35})`;
+        g.fillRect(sx, sy, 1, 1);
+      }
+      // Highlight patches
+      for (let i = 0; i < 40; i++) {
+        const sx = Math.floor(Math.random() * TEX_SIZE);
+        const sy = Math.floor(Math.random() * TEX_SIZE);
+        g.fillStyle = highlight;
+        g.globalAlpha = Math.random() * 0.25;
+        g.fillRect(sx, sy, 1, 1);
+      }
+      g.globalAlpha = 1;
+      return c;
+    }
+    const TEX_NS = makeBrickTex('#7a3810', '#1a0800', '#c06830');
+    const TEX_EW = makeBrickTex('#5a2808', '#100400', '#a05820');
+
+    // Floor texture (stone tiles) — returned as ImageData for pixel-level sampling
+    function makeFloorTex(baseR, baseG, baseB) {
+      const c = document.createElement('canvas');
+      c.width = c.height = TEX_SIZE;
+      const g = c.getContext('2d');
+      g.fillStyle = `rgb(${baseR},${baseG},${baseB})`;
+      g.fillRect(0, 0, TEX_SIZE, TEX_SIZE);
+      // Tile grid
+      g.fillStyle = 'rgba(0,0,0,0.5)';
+      for (let i = 0; i <= TEX_SIZE; i += 16) {
+        g.fillRect(0, i, TEX_SIZE, 1);
+        g.fillRect(i, 0, 1, TEX_SIZE);
+      }
+      // Weathering speckles
+      for (let i = 0; i < 140; i++) {
+        const sx = Math.floor(Math.random() * TEX_SIZE);
+        const sy = Math.floor(Math.random() * TEX_SIZE);
+        g.fillStyle = `rgba(0,0,0,${Math.random() * 0.4})`;
+        g.fillRect(sx, sy, 1, 1);
+      }
+      for (let i = 0; i < 60; i++) {
+        const sx = Math.floor(Math.random() * TEX_SIZE);
+        const sy = Math.floor(Math.random() * TEX_SIZE);
+        g.fillStyle = `rgba(${baseR * 1.5 | 0},${baseG * 1.5 | 0},${baseB * 1.5 | 0},0.3)`;
+        g.fillRect(sx, sy, 1, 1);
+      }
+      return g.getImageData(0, 0, TEX_SIZE, TEX_SIZE);
+    }
+    const FLOOR_TEX = makeFloorTex(58, 28, 10);
+    const CEIL_TEX = makeFloorTex(24, 10, 14);
+
+    // Audio
+    const AC = new (window.AudioContext || window.webkitAudioContext)();
+    function snd(f, d, t, v) { const o = AC.createOscillator(), g = AC.createGain(); o.type = t || 'square'; o.frequency.value = f; g.gain.setValueAtTime(v || 0.08, AC.currentTime); g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + d); o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime + d); }
+    function sfxShoot() { snd(200, 0.05, 'square', 0.06); setTimeout(() => snd(120, 0.08, 'sawtooth', 0.05), 20); }
+    function sfxHit() { snd(600, 0.1, 'sawtooth', 0.06) }
+    function sfxKill() { snd(300, 0.15, 'sawtooth', 0.07); setTimeout(() => snd(150, 0.2, 'sawtooth', 0.06), 60); }
+    function sfxDie() { snd(300, 0.4, 'sawtooth', 0.1); setTimeout(() => snd(150, 0.5, 'sawtooth', 0.07), 120); }
+    function sfxLevel() { snd(600, 0.1, 'sine', 0.05); setTimeout(() => snd(800, 0.1, 'sine', 0.05), 80); setTimeout(() => snd(1000, 0.15, 'sine', 0.05), 160); }
+    function sfxHurt() { snd(180, 0.15, 'sawtooth', 0.08) }
+
+    function isWall(x, y) {
+      const mx = Math.floor(x), my = Math.floor(y);
+      if (mx < 0 || my < 0 || mx >= MAP_W || my >= MAP_H) return true;
+      const t = MAP[my][mx];
+      return t === '#' || t === 'D';
+    }
+
+    function spawnLevel() {
+      const idx = Math.min(lvl - 1, MAPS.length - 1);
+      MAP = MAPS[idx];
+      px = 1.5; py = 1.5; pa = 0;
+      ene = []; pickups = [];
+      // Map 3 = ending room, no enemies/pickups
+      if (idx === 2) return;
+      const count = 5 + lvl;
+      let tries = 0;
+      while (ene.length < count && tries < 500) {
+        tries++;
+        const ex = 1 + Math.floor(Math.random() * (MAP_W - 2));
+        const ey = 1 + Math.floor(Math.random() * (MAP_H - 2));
+        if (MAP[ey][ex] !== '.') continue;
+        const dx = ex + 0.5 - px, dy = ey + 0.5 - py;
+        if (dx * dx + dy * dy < 16) continue;
+        ene.push({ x: ex + 0.5, y: ey + 0.5, hp: 3, alive: true, moveT: 0, atkCd: 60, hurtT: 0 });
+      }
+      // Spawn 3 ammo + 3 health pickups per map
+      function placePickup(kind) {
+        let t = 0;
+        while (t < 200) {
+          t++;
+          const ex = 1 + Math.floor(Math.random() * (MAP_W - 2));
+          const ey = 1 + Math.floor(Math.random() * (MAP_H - 2));
+          if (MAP[ey][ex] !== '.') continue;
+          const dx = ex + 0.5 - px, dy = ey + 0.5 - py;
+          if (dx * dx + dy * dy < 4) continue;
+          let skip = false;
+          for (const e of ene) { if (Math.abs(e.x - (ex + 0.5)) < 0.5 && Math.abs(e.y - (ey + 0.5)) < 0.5) { skip = true; break; } }
+          if (skip) continue;
+          for (const p of pickups) { if (Math.abs(p.x - (ex + 0.5)) < 0.5 && Math.abs(p.y - (ey + 0.5)) < 0.5) { skip = true; break; } }
+          if (skip) continue;
+          pickups.push({ x: ex + 0.5, y: ey + 0.5, kind, taken: false, bob: Math.random() * Math.PI * 2 });
+          return;
+        }
+      }
+      for (let i = 0; i < 3; i++)placePickup('ammo');
+      for (let i = 0; i < 3; i++)placePickup('health');
+    }
+
+    function initGame() {
+      score = 0; lives = 5; lvl = 1; inv = 0; damageFlash = 0; ammo = 30; elapsed = 0;
+      spawnLevel();
+    }
+
+    function startGame() { state = 'playing'; initGame(); AC.resume(); attract = false; attractStartT = Date.now(); }
+
+    function interactDoor() {
+      // Find adjacent D or B tile within 1.8 units
+      let nearestD = null, nearestB = null, dBest = Infinity;
+      for (let y = 0; y < MAP_H; y++) {
+        for (let x = 0; x < MAP_W; x++) {
+          const t = MAP[y][x];
+          if (t !== 'D' && t !== 'B') continue;
+          const dx = (x + 0.5) - px, dy = (y + 0.5) - py;
+          const d = dx * dx + dy * dy;
+          if (d > 3.5) continue;
+          if (d < dBest) { dBest = d; if (t === 'D') nearestD = { x, y }; else nearestB = { x, y }; }
+        }
+      }
+      if (nearestD) {
+        // Open + advance (enemies optional)
+        sfxLevel(); msgText = 'DOOR OPENED'; msgT = 40;
+        lvl++; spawnLevel();
+      } else if (nearestB) {
+        // Press button → record time as inverted score → ending
+        sfxLevel();
+        score = Math.max(0, TIME_MAX - elapsed);
+        state = 'ending';
+        if (score > hi) hi = score;
+      }
+    }
+
+    // Input (keyboard + touch only)
+    let keys = {}, tL = false, tR = false, tFw = false, tBk = false, tFr = false;
+    document.addEventListener('keydown', e => {
+      keys[e.code] = true;
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'].includes(e.code)) e.preventDefault();
+      if (state === 'title') { if (e.code === 'Space') startGame(); return; }
+      if (state === 'ranking') { if (e.code === 'Space' || e.code === 'Enter') startGame(); return; }
+      if (state === 'dead') { if (e.code === 'Space' || e.code === 'Enter') startGame(); return; }
+      if (state === 'ending') { if (e.code === 'Space' || e.code === 'Enter') { state = 'gameover'; nameChars = ['A', 'A', 'A']; namePos = 0; } return; }
+      if (state === 'playing' && e.code === 'KeyR') { interactDoor(); return; }
+      if (state === 'gameover') {
+        if (e.code === 'ArrowLeft' || e.code === 'KeyA') { namePos = Math.max(0, namePos - 1); }
+        else if (e.code === 'ArrowRight' || e.code === 'KeyD') { namePos = Math.min(2, namePos + 1); }
+        else if (e.code === 'ArrowUp' || e.code === 'KeyW') { const i = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 '.indexOf(nameChars[namePos]); nameChars[namePos] = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 '[(i + 1) % 37]; }
+        else if (e.code === 'ArrowDown' || e.code === 'KeyS') { const i = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 '.indexOf(nameChars[namePos]); nameChars[namePos] = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 '[(i - 1 + 37) % 37]; }
+        else if (e.code === 'Enter') { submitScore(); }
+      }
+    });
+    document.addEventListener('keyup', e => { keys[e.code] = false });
+    window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; tL = tR = tFw = tBk = tFr = false; });
+
+    function addT(el, dn, up) { el.addEventListener('touchstart', e => { e.preventDefault(); dn() }, { passive: false }); el.addEventListener('touchend', e => { e.preventDefault(); if (up) up() }, { passive: false }); el.addEventListener('touchcancel', () => { if (up) up() }); }
+    addT(document.getElementById('tLeft'), () => { tL = true; if (state === 'title' || state === 'ranking') startGame(); }, () => { tL = false });
+    addT(document.getElementById('tRight'), () => { tR = true; if (state === 'title' || state === 'ranking') startGame(); }, () => { tR = false });
+    addT(document.getElementById('tFwd'), () => { tFw = true; if (state === 'title' || state === 'ranking') startGame(); }, () => { tFw = false });
+    addT(document.getElementById('tBack'), () => { tBk = true; if (state === 'title' || state === 'ranking') startGame(); }, () => { tBk = false });
+    addT(document.getElementById('tFire'), () => { tFr = true; if (state === 'title' || state === 'ranking') startGame(); }, () => { tFr = false });
+    canvas.addEventListener('touchstart', () => { if (state === 'title' || state === 'ranking') startGame(); }, { passive: true });
+
+    // Ranking API
+    const API_BASE = location.origin;
+    const IS_LOCAL = location.protocol === 'file:';
+    function fetchRanking() {
+      if (IS_LOCAL) { rankingData = JSON.parse(localStorage.getItem('dgRank') || '[]'); rankingLoaded = true; if (rankingData.length > 0) hi = Math.max(hi, rankingData[0].score); return; }
+      fetch(API_BASE + '/api/ranking/dungeon').then(r => r.json()).then(d => { rankingData = d; rankingLoaded = true; if (d.length > 0) hi = Math.max(hi, d[0].score); }).catch(() => { rankingData = JSON.parse(localStorage.getItem('dgRank') || '[]'); rankingLoaded = true; if (rankingData.length > 0) hi = Math.max(hi, rankingData[0].score); });
+    }
+    function saveLocal(name) { let local = JSON.parse(localStorage.getItem('dgRank') || '[]'); local.push({ name, score, level: lvl }); local.sort((a, b) => b.score - a.score); local = local.slice(0, 10); localStorage.setItem('dgRank', JSON.stringify(local)); rankingData = local; if (local.length > 0) hi = Math.max(hi, local[0].score); }
+    function submitScore() {
+      const name = nameChars.join('');
+      state = 'ranking'; attract = false; attractStartT = Date.now();
+      if (IS_LOCAL) { saveLocal(name); return; }
+      fetch(API_BASE + '/api/ranking/dungeon', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, score, level: lvl }) }).then(r => r.json()).then(d => { rankingData = d; if (d.length > 0) hi = Math.max(hi, d[0].score); }).catch(() => { saveLocal(name); });
+    }
+    fetchRanking();
+
+    // Ray casting
+    function castRay(rayAngle) {
+      const cos = Math.cos(rayAngle), sin = Math.sin(rayAngle);
+      let mapX = Math.floor(px), mapY = Math.floor(py);
+      const dDX = Math.abs(1 / cos), dDY = Math.abs(1 / sin);
+      let stepX, stepY, sDX, sDY;
+      if (cos < 0) { stepX = -1; sDX = (px - mapX) * dDX; } else { stepX = 1; sDX = (mapX + 1 - px) * dDX; }
+      if (sin < 0) { stepY = -1; sDY = (py - mapY) * dDY; } else { stepY = 1; sDY = (mapY + 1 - py) * dDY; }
+      let hit = false, side = 0, iter = 0, tile = '#';
+      while (!hit && iter < 64) {
+        if (sDX < sDY) { sDX += dDX; mapX += stepX; side = 0; }
+        else { sDY += dDY; mapY += stepY; side = 1; }
+        if (mapX < 0 || mapY < 0 || mapX >= MAP_W || mapY >= MAP_H) { hit = true; break; }
+        const t = MAP[mapY][mapX];
+        if (t === '#' || t === 'D') { hit = true; tile = t; }
+        iter++;
+      }
+      let d;
+      if (side === 0) d = (mapX - px + (1 - stepX) / 2) / cos;
+      else d = (mapY - py + (1 - stepY) / 2) / sin;
+      return { dist: Math.max(0.01, d), side, mapX, mapY, tile };
+    }
+
+    // Z-buffer for sprite occlusion
+    const zBuf = new Array(W);
+
+    // View bob
+    let bobT = 0, bobX = 0, bobY = 0;
+
+    // Floor/ceiling casting (Doom-style) using ImageData
+    // Horizon row distance formula: rowDist = (H/2) / (y - H/2)
+    function drawFloorCeiling() {
+      const img = ctx.getImageData(0, 0, W, H);
+      const data = img.data;
+      const fd = FLOOR_TEX.data, cd = CEIL_TEX.data;
+      const halfH = H >> 1;
+      const posZ = halfH;
+      const dirX0 = Math.cos(pa - FOV / 2), dirY0 = Math.sin(pa - FOV / 2);
+      const dirX1 = Math.cos(pa + FOV / 2), dirY1 = Math.sin(pa + FOV / 2);
+      for (let y = halfH + 1; y < H; y++) {
+        const p = y - halfH;
+        const rowDist = posZ / p;
+        const stepX = rowDist * (dirX1 - dirX0) / W;
+        const stepY = rowDist * (dirY1 - dirY0) / W;
+        let fx = px + rowDist * dirX0;
+        let fy = py + rowDist * dirY0;
+        const fog = Math.max(0.12, 1 - rowDist * 0.09);
+        const cy = H - 1 - y;
+        for (let x = 0; x < W; x++) {
+          const tx = (Math.floor(fx * TEX_SIZE) % TEX_SIZE + TEX_SIZE) % TEX_SIZE;
+          const ty = (Math.floor(fy * TEX_SIZE) % TEX_SIZE + TEX_SIZE) % TEX_SIZE;
+          const si = (ty * TEX_SIZE + tx) * 4;
+          const di = (y * W + x) * 4;
+          data[di] = fd[si] * fog;
+          data[di + 1] = fd[si + 1] * fog;
+          data[di + 2] = fd[si + 2] * fog;
+          data[di + 3] = 255;
+          const ci = (cy * W + x) * 4;
+          data[ci] = cd[si] * fog * 0.8;
+          data[ci + 1] = cd[si + 1] * fog * 0.8;
+          data[ci + 2] = cd[si + 2] * fog * 0.8;
+          data[ci + 3] = 255;
+          fx += stepX; fy += stepY;
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+    }
+
+    function tryMove(nx, ny) {
+      const pad = 0.15;
+      // X
+      if (!isWall(nx + Math.sign(nx - px) * pad, py)) px = nx;
+      // Y
+      if (!isWall(px, ny + Math.sign(ny - py) * pad)) py = ny;
+    }
+
+    function update() {
+      if (attract) {
+        if (state === 'title') { if (Date.now() - attractStartT >= 3000) { attractStartT = Date.now(); state = 'ranking'; fetchRanking(); } }
+        else if (state === 'ranking') { if (Date.now() - attractStartT >= 3000) { attractStartT = Date.now(); state = 'title'; } }
+      } else if (state === 'ranking') {
+        if (Date.now() - attractStartT >= 3000) { attractStartT = Date.now(); state = 'title'; attract = true; }
+      }
+
+      if (state !== 'playing') return;
+
+      // Timer (only while alive and playing)
+      elapsed++;
+
+      // Input (hold Shift to strafe with arrows)
+      const strafe = keys['ShiftLeft'] || keys['ShiftRight'];
+      const leftHeld = keys['ArrowLeft'] || keys['KeyA'] || tL;
+      const rightHeld = keys['ArrowRight'] || keys['KeyD'] || tR;
+      const rot = strafe ? 0 : ((leftHeld ? -1 : 0) + (rightHeld ? 1 : 0));
+      const str = strafe ? ((leftHeld ? -1 : 0) + (rightHeld ? 1 : 0)) : 0;
+      const mov = (keys['ArrowUp'] || keys['KeyW'] || tFw ? 1 : 0) + (keys['ArrowDown'] || keys['KeyS'] || tBk ? -1 : 0);
+      pa += rot * 0.04;
+      let moved = false;
+      if (mov !== 0) {
+        const nx = px + Math.cos(pa) * 0.07 * mov;
+        const ny = py + Math.sin(pa) * 0.07 * mov;
+        tryMove(nx, ny);
+        moved = true;
+      }
+      if (str !== 0) {
+        // Strafe perpendicular to facing: right = (-sin pa, cos pa)
+        const nx = px + (-Math.sin(pa)) * 0.06 * str;
+        const ny = py + (Math.cos(pa)) * 0.06 * str;
+        tryMove(nx, ny);
+        moved = true;
+      }
+      if (moved) { bobT += 0.25; } else { bobT *= 0.9; }
+      bobX = Math.sin(bobT) * 2;
+      bobY = Math.abs(Math.cos(bobT)) * 2;
+      if (gunCd > 0) gunCd--;
+      if (gunKick > 0) gunKick--;
+      if (inv > 0) inv--;
+      if (damageFlash > 0) damageFlash--;
+
+      // Shooting
+      if ((keys['Space'] || tFr) && gunCd <= 0) {
+        if (ammo <= 0) { gunCd = 20; snd(100, 0.1, 'square', 0.04); msgText = 'NO AMMO'; msgT = 40; } else {
+          ammo--; gunCd = 18; gunKick = 8; sfxShoot();
+          // Find closest enemy in cone. Cone widens with proximity (close = forgiving).
+          let hitE = null, hitD = Infinity;
+          for (const e of ene) {
+            if (!e.alive) continue;
+            const dx = e.x - px, dy = e.y - py;
+            const d2 = dx * dx + dy * dy;
+            if (d2 > 100) continue;
+            const dist = Math.sqrt(d2);
+            // Enemy radius ~0.4 → half-angle = atan2(0.4, dist); min cone 0.1 rad, max 0.5 rad
+            const coneHalf = Math.max(0.1, Math.min(0.5, Math.atan2(0.45, dist) + 0.06));
+            const ang = Math.atan2(dy, dx);
+            let da = ang - pa;
+            while (da > Math.PI) da -= 2 * Math.PI;
+            while (da < -Math.PI) da += 2 * Math.PI;
+            if (Math.abs(da) > coneHalf) continue;
+            // Check wall block
+            const steps = Math.ceil(dist * 10);
+            let blocked = false;
+            for (let s = 1; s < steps; s++) {
+              const t = s / steps;
+              if (isWall(px + dx * t, py + dy * t)) { blocked = true; break; }
+            }
+            if (blocked) continue;
+            if (d2 < hitD) { hitD = d2; hitE = e; }
+          }
+          if (hitE) {
+            hitE.hp--; hitE.hurtT = 10;
+            sfxHit();
+            if (hitE.hp <= 0) {
+              hitE.alive = false; sfxKill();
+            }
+          }
+        }
+      }
+
+      // Pickups: collect
+      for (const p of pickups) {
+        if (p.taken) continue;
+        p.bob += 0.1;
+        const dx = p.x - px, dy = p.y - py;
+        if (dx * dx + dy * dy < 0.35) {
+          p.taken = true;
+          if (p.kind === 'ammo') { ammo += 15; msgText = '+15 AMMO'; msgT = 40; snd(800, 0.1, 'square', 0.05); }
+          else { lives++; msgText = '+1 HP'; msgT = 40; snd(1000, 0.15, 'sine', 0.06); }
+        }
+      }
+
+      // Enemies — Doom-style AI: require line of sight to chase, radius collision
+      let aliveCnt = 0;
+      const ER = 0.3; // enemy radius
+      for (const e of ene) {
+        if (!e.alive) continue;
+        aliveCnt++;
+        if (e.hurtT > 0) e.hurtT--;
+        const dx = px - e.x, dy = py - e.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        // Check line of sight (ray from enemy to player, any wall in between?)
+        let los = true;
+        if (d > 0.1) {
+          const steps = Math.ceil(d * 8);
+          for (let s = 1; s < steps; s++) {
+            const t = s / steps;
+            if (isWall(e.x + dx * t, e.y + dy * t)) { los = false; break; }
+          }
+        }
+        // Only chase if line of sight AND within 7 units
+        if (los && d > 0.5 && d < 7) {
+          e.moveT++;
+          if (e.moveT % 2 === 0) {
+            const sp = 0.066 + lvl * 0.0075;
+            const mx = (dx / d) * sp, my = (dy / d) * sp;
+            const nx = e.x + mx, ny = e.y + my;
+            // 4-corner wall check (radius-aware)
+            const canX = !isWall(nx - ER, e.y - ER) && !isWall(nx + ER, e.y - ER) && !isWall(nx - ER, e.y + ER) && !isWall(nx + ER, e.y + ER);
+            const canY = !isWall(e.x - ER, ny - ER) && !isWall(e.x + ER, ny - ER) && !isWall(e.x - ER, ny + ER) && !isWall(e.x + ER, ny + ER);
+            if (canX) e.x = nx;
+            if (canY) e.y = ny;
+          }
+        }
+        // Touch player
+        if (d < 0.6 && inv <= 0) {
+          inv = 60; damageFlash = 15; lives--; sfxHurt();
+          if (lives <= 0) { state = 'dead'; sfxDie(); }
+        }
+      }
+
+      if (msgT > 0) msgT--;
+    }
+
+    function drawWalls() {
+      for (let x = 0; x < W; x++) {
+        const cameraX = 2 * x / W - 1;
+        const rayAngle = pa + Math.atan(cameraX * Math.tan(FOV / 2));
+        const r = castRay(rayAngle);
+        const corrected = Math.max(0.02, r.dist * Math.cos(rayAngle - pa));
+        zBuf[x] = corrected;
+        const lineHeight = Math.min(H * 4, H / corrected);
+        const drawStart = Math.floor((H - lineHeight) / 2);
+
+        // Compute where the ray hit on the wall (0..1 along the wall cell)
+        let wallX;
+        if (r.side === 0) wallX = py + r.dist * Math.sin(rayAngle);
+        else wallX = px + r.dist * Math.cos(rayAngle);
+        wallX -= Math.floor(wallX);
+
+        // Map to texture U
+        let texX = Math.floor(wallX * TEX_SIZE);
+        if (r.side === 0 && Math.cos(rayAngle) > 0) texX = TEX_SIZE - texX - 1;
+        if (r.side === 1 && Math.sin(rayAngle) < 0) texX = TEX_SIZE - texX - 1;
+        texX = Math.max(0, Math.min(TEX_SIZE - 1, texX));
+
+        const tex = r.side === 0 ? TEX_NS : TEX_EW;
+        ctx.drawImage(tex, texX, 0, 1, TEX_SIZE, x, drawStart, 1, lineHeight);
+
+        // Distance fog overlay
+        const fog = Math.min(0.85, corrected * 0.13);
+        ctx.fillStyle = `rgba(0,0,0,${fog})`;
+        ctx.fillRect(x, drawStart, 1, lineHeight);
+
+        // Door: blue tint overlay
+        if (r.tile === 'D') {
+          ctx.fillStyle = `rgba(60,120,200,${Math.max(0.3, 1 - fog)})`;
+          ctx.fillRect(x, drawStart, 1, lineHeight);
+        }
+      }
+    }
+
+    function drawEnemies() {
+      // Sort far first
+      const list = ene.filter(e => e.alive).map(e => {
+        const dx = e.x - px, dy = e.y - py;
+        return { e, dx, dy, d2: dx * dx + dy * dy };
+      }).sort((a, b) => b.d2 - a.d2);
+
+      for (const o of list) {
+        const { e, dx, dy } = o;
+        // Transform to camera space
+        const c = Math.cos(-pa), s = Math.sin(-pa);
+        const tx = dx * c - dy * s;
+        const ty = dx * s + dy * c;
+        if (tx <= 0.1) continue;
+        const scrX = (W / 2) * (1 + ty / tx / Math.tan(FOV / 2));
+        const size = H / tx;
+        const halfW = size * 0.35;
+        const halfH = size * 0.45;
+        const sx0 = Math.floor(scrX - halfW);
+        const sx1 = Math.floor(scrX + halfW);
+        const sy0 = Math.floor(H / 2 - halfH);
+        const sy1 = Math.floor(H / 2 + halfH);
+        // Draw column by column with z test
+        for (let sx = sx0; sx < sx1; sx++) {
+          if (sx < 0 || sx >= W) continue;
+          if (tx >= zBuf[sx]) continue;
+          // Enemy silhouette: pixel pattern
+          const u = (sx - sx0) / (sx1 - sx0);
+          for (let sy = Math.max(0, sy0); sy < Math.min(H, sy1); sy++) {
+            const v = (sy - sy0) / (sy1 - sy0);
+            // Simple sprite: body + eyes
+            let pick = null;
+            if (v < 0.15) { pick = null; } // top space
+            else if (v < 0.35) {
+              // Head
+              if (u > 0.25 && u < 0.75) pick = e.hurtT > 0 ? '#fff' : '#662233';
+              if (v > 0.22 && v < 0.30 && (u > 0.30 && u < 0.40 || u > 0.60 && u < 0.70)) pick = '#ff2222'; // eyes
+            } else if (v < 0.80) {
+              // Body
+              if (u > 0.18 && u < 0.82) pick = e.hurtT > 0 ? '#fff' : '#441122';
+              if (v > 0.45 && v < 0.55 && u > 0.35 && u < 0.65) pick = '#884400'; // belt
+            } else {
+              // Legs
+              if (u > 0.25 && u < 0.45) pick = e.hurtT > 0 ? '#fff' : '#22000a';
+              if (u > 0.55 && u < 0.75) pick = e.hurtT > 0 ? '#fff' : '#22000a';
+            }
+            if (pick) {
+              ctx.fillStyle = pick;
+              ctx.fillRect(sx, sy, 1, 1);
+            }
+          }
+        }
+      }
+    }
+
+    function drawButtons() {
+      // Scan map for 'B' tiles and render as glowing pillar sprites
+      for (let my = 0; my < MAP_H; my++) {
+        for (let mx = 0; mx < MAP_W; mx++) {
+          if (MAP[my][mx] !== 'B') continue;
+          const wx = mx + 0.5, wy = my + 0.5;
+          const dx = wx - px, dy = wy - py;
+          const c = Math.cos(-pa), s = Math.sin(-pa);
+          const tx = dx * c - dy * s;
+          const ty = dx * s + dy * c;
+          if (tx <= 0.1) continue;
+          const scrX = (W / 2) * (1 + ty / tx / Math.tan(FOV / 2));
+          const size = H / tx;
+          const half = size * 0.25;
+          const cy = H / 2 + size * 0.25;
+          const sx0 = Math.floor(scrX - half), sx1 = Math.floor(scrX + half);
+          const sy0 = Math.floor(cy - half * 1.5), sy1 = Math.floor(cy + half * 0.5);
+          const pulse = 0.7 + 0.3 * Math.sin(Date.now() * 0.006);
+          for (let sx = sx0; sx < sx1; sx++) {
+            if (sx < 0 || sx >= W) continue;
+            if (tx >= zBuf[sx]) continue;
+            for (let sy = Math.max(0, sy0); sy < Math.min(H, sy1); sy++) {
+              const u = (sx - sx0) / (sx1 - sx0);
+              const v = (sy - sy0) / (sy1 - sy0);
+              let col = null;
+              if (v < 0.7) {
+                // Pillar base
+                if (u > 0.2 && u < 0.8) col = '#444466';
+              }
+              if (v > 0.3 && v < 0.55) {
+                // Button (round red) in middle
+                const cu = u - 0.5, cv = (v - 0.42) * 2;
+                if (cu * cu + cv * cv < 0.12) {
+                  col = `rgba(${255 * pulse | 0},${40 * pulse | 0},${40 * pulse | 0},1)`;
+                }
+              }
+              if (col) { ctx.fillStyle = col; ctx.fillRect(sx, sy, 1, 1); }
+            }
+          }
+        }
+      }
+    }
+
+    // Pixel art patterns for pickups
+    const HEART_PAT = [
+      '.RR.RR.',
+      'RWRRRRR',
+      'RWRRRRR',
+      'RRRRRRR',
+      '.RRRRR.',
+      '..RRR..',
+      '...R...',
+    ];
+    const HEART_COL = { R: '#ff2244', W: '#ffcccc' };
+    const BULLET_PAT = [
+      '..Y..',
+      '.YWY.',
+      '.YBY.',
+      '.BBB.',
+      '.BBB.',
+      '.BBB.',
+      '.BBB.',
+    ];
+    const BULLET_COL = { Y: '#ffdd44', W: '#ffffff', B: '#cc7722' };
+
+    function drawPickups() {
+      const list = pickups.filter(p => !p.taken).map(p => {
+        const dx = p.x - px, dy = p.y - py;
+        return { p, dx, dy, d2: dx * dx + dy * dy };
+      }).sort((a, b) => b.d2 - a.d2);
+      for (const o of list) {
+        const { p, dx, dy } = o;
+        const c = Math.cos(-pa), s = Math.sin(-pa);
+        const tx = dx * c - dy * s;
+        const ty = dx * s + dy * c;
+        if (tx <= 0.1) continue;
+        const scrX = (W / 2) * (1 + ty / tx / Math.tan(FOV / 2));
+        const size = H / tx;
+        const pat = p.kind === 'health' ? HEART_PAT : BULLET_PAT;
+        const col = p.kind === 'health' ? HEART_COL : BULLET_COL;
+        const pW = pat[0].length, pH = pat.length;
+        // Scale: pickup fills ~35% of sprite box
+        const halfW = size * 0.22;
+        const halfH = size * 0.22 * (pH / pW);
+        const bob = Math.sin(p.bob) * 2.5;
+        const cy = H / 2 + size * 0.32 + bob;
+        const sx0 = Math.floor(scrX - halfW);
+        const sx1 = Math.floor(scrX + halfW);
+        const sy0 = Math.floor(cy - halfH);
+        const sy1 = Math.floor(cy + halfH);
+        for (let sx = sx0; sx < sx1; sx++) {
+          if (sx < 0 || sx >= W) continue;
+          if (tx >= zBuf[sx]) continue;
+          for (let sy = Math.max(0, sy0); sy < Math.min(H, sy1); sy++) {
+            const u = (sx - sx0) / (sx1 - sx0);
+            const v = (sy - sy0) / (sy1 - sy0);
+            const gx = Math.floor(u * pW);
+            const gy = Math.floor(v * pH);
+            if (gx < 0 || gx >= pW || gy < 0 || gy >= pH) continue;
+            const ch = pat[gy][gx];
+            if (ch === '.') continue;
+            ctx.fillStyle = col[ch] || '#fff';
+            ctx.fillRect(sx, sy, 1, 1);
+          }
+        }
+      }
+    }
+
+    function drawMinimap() {
+      const cs = 5;
+      const mw = MAP_W * cs, mh = MAP_H * cs;
+      const mx = W - mw - 6, my = 6;
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(mx - 2, my - 2, mw + 4, mh + 4);
+      ctx.strokeStyle = '#666'; ctx.lineWidth = 1;
+      ctx.strokeRect(mx - 2, my - 2, mw + 4, mh + 4);
+      // Walls as line edges only (no filled tiles)
+      ctx.strokeStyle = '#aa7744'; ctx.lineWidth = 1;
+      function isBlock(x, y) {
+        if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return true;
+        const t = MAP[y][x];
+        return t === '#' || t === 'D';
+      }
+      for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+        if (!isBlock(x, y)) continue;
+        const x0 = mx + x * cs, y0 = my + y * cs;
+        // Draw edge only where neighbor is not a block
+        if (!isBlock(x, y - 1)) { ctx.beginPath(); ctx.moveTo(x0, y0 + 0.5); ctx.lineTo(x0 + cs, y0 + 0.5); ctx.stroke(); }
+        if (!isBlock(x, y + 1)) { ctx.beginPath(); ctx.moveTo(x0, y0 + cs - 0.5); ctx.lineTo(x0 + cs, y0 + cs - 0.5); ctx.stroke(); }
+        if (!isBlock(x - 1, y)) { ctx.beginPath(); ctx.moveTo(x0 + 0.5, y0); ctx.lineTo(x0 + 0.5, y0 + cs); ctx.stroke(); }
+        if (!isBlock(x + 1, y)) { ctx.beginPath(); ctx.moveTo(x0 + cs - 0.5, y0); ctx.lineTo(x0 + cs - 0.5, y0 + cs); ctx.stroke(); }
+      }
+      // FOV cone
+      ctx.fillStyle = 'rgba(255,255,100,0.15)';
+      ctx.beginPath();
+      ctx.moveTo(mx + px * cs, my + py * cs);
+      ctx.lineTo(mx + (px + Math.cos(pa - FOV / 2) * 5) * cs, my + (py + Math.sin(pa - FOV / 2) * 5) * cs);
+      ctx.lineTo(mx + (px + Math.cos(pa + FOV / 2) * 5) * cs, my + (py + Math.sin(pa + FOV / 2) * 5) * cs);
+      ctx.closePath();
+      ctx.fill();
+      // player
+      ctx.fillStyle = '#ffff00';
+      ctx.fillRect(mx + px * cs - 1, my + py * cs - 1, 3, 3);
+      ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(mx + px * cs, my + py * cs);
+      ctx.lineTo(mx + (px + Math.cos(pa) * 1.5) * cs, my + (py + Math.sin(pa) * 1.5) * cs);
+      ctx.stroke();
+    }
+
+    function drawHUD() {
+      // Crosshair at center of screen
+      const cx2 = W / 2, cy2 = H / 2;
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fillRect(cx2 - 4, cy2, 3, 1);
+      ctx.fillRect(cx2 + 2, cy2, 3, 1);
+      ctx.fillRect(cx2, cy2 - 4, 1, 3);
+      ctx.fillRect(cx2, cy2 + 2, 1, 3);
+      ctx.fillStyle = 'rgba(255,60,60,0.9)';
+      ctx.fillRect(cx2, cy2, 1, 1);
+
+      // Gun at bottom center (with bob sway when walking)
+      const gx = W / 2 + bobX, gy = H - 20 + gunKick + bobY;
+      ctx.fillStyle = '#444';
+      ctx.fillRect(gx - 14, gy, 28, 20);
+      ctx.fillStyle = '#666';
+      ctx.fillRect(gx - 10, gy - 6, 20, 6);
+      ctx.fillStyle = '#222';
+      ctx.fillRect(gx - 2, gy - 20, 4, 14);
+      if (gunKick > 5) {
+        ctx.fillStyle = '#ffcc00';
+        ctx.fillRect(gx - 3, gy - 24, 6, 6);
+        ctx.fillStyle = '#ff6600';
+        ctx.fillRect(gx - 6, gy - 22, 12, 3);
+      }
+
+      // Left: TIME → hearts → LVL
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#ff4444'; ctx.font = '7px "Press Start 2P"'; ctx.fillText('TIME', 6, 10);
+      ctx.fillStyle = '#ffffff'; ctx.font = '9px "Press Start 2P"'; ctx.fillText((elapsed / 60).toFixed(1) + 's', 6, 20);
+      // HP hearts directly below time
+      ctx.fillStyle = '#ff4444'; ctx.font = '10px "Press Start 2P"';
+      const maxRow = 10;
+      const heartRows = Math.max(1, Math.ceil(lives / maxRow));
+      for (let i = 0; i < lives; i++) {
+        const row = Math.floor(i / maxRow);
+        const col = i % maxRow;
+        ctx.fillText('\u2665', 6 + col * 10, 34 + row * 12);
+      }
+      // BEST time below hearts
+      const bestY = 34 + heartRows * 12 + 6;
+      ctx.fillStyle = '#ff4444'; ctx.font = '7px "Press Start 2P"'; ctx.fillText('BEST', 6, bestY);
+      ctx.fillStyle = '#ffffff'; ctx.font = '9px "Press Start 2P"';
+      ctx.fillText(hi > 0 ? ((TIME_MAX - hi) / 60).toFixed(1) + 's' : '--', 6, bestY + 10);
+
+      // Center: AMMO
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffaa22'; ctx.font = '8px "Press Start 2P"'; ctx.fillText('AMMO', W / 2, 10);
+      ctx.fillStyle = ammo <= 5 ? '#ff4444' : '#ffff88'; ctx.font = '12px "Press Start 2P"'; ctx.fillText(String(ammo).padStart(2, '0'), W / 2, 24);
+
+
+      // Pickup message
+      if (msgT > 0) {
+        ctx.textAlign = 'center';
+        ctx.globalAlpha = Math.min(1, msgT / 20);
+        ctx.fillStyle = '#ffff88'; ctx.font = '9px "Press Start 2P"';
+        ctx.fillText(msgText, W / 2, H - 50);
+        ctx.globalAlpha = 1;
+      }
+      // Damage flash
+      if (damageFlash > 0) {
+        ctx.fillStyle = `rgba(255,0,0,${damageFlash / 15 * 0.5})`;
+        ctx.fillRect(0, 0, W, H);
+      }
+    }
+
+    function drawTitle() {
+      ctx.fillStyle = '#0a0208'; ctx.fillRect(0, 0, W, H);
+      // Torch flicker bg
+      const flk = Math.sin(Date.now() * 0.01) * 5;
+      ctx.fillStyle = 'rgba(100,30,10,0.3)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ff6633'; ctx.font = '24px "Press Start 2P"';
+      ctx.fillText('DUNGEON', W / 2, H * 0.3 + flk * 0.3);
+      ctx.fillStyle = '#aa2222'; ctx.font = '7px "Press Start 2P"';
+      ctx.fillText('A CRYPT CRAWLER', W / 2, H * 0.4);
+      ctx.fillStyle = '#ffffff'; ctx.font = '7px "Press Start 2P"';
+      ctx.fillText('PRESS SPACE OR TAP', W / 2, H * 0.55);
+      ctx.fillText('TO START', W / 2, H * 0.55 + 12);
+      ctx.fillStyle = '#668'; ctx.font = '5px "Press Start 2P"';
+      ctx.fillText('ARROWS: TURN/MOVE', W / 2, H * 0.70);
+      ctx.fillText('SHIFT+ARROWS: STRAFE', W / 2, H * 0.70 + 8);
+      ctx.fillText('SPACE: FIRE', W / 2, H * 0.70 + 16);
+      ctx.fillText('R: OPEN DOOR', W / 2, H * 0.70 + 24);
+      ctx.fillStyle = '#ff4444'; ctx.font = '6px "Press Start 2P"';
+      const bestTxt = hi > 0 ? ((TIME_MAX - hi) / 60).toFixed(2) + 's' : '--';
+      ctx.fillText('BEST TIME ' + bestTxt, W / 2, H * 0.88);
+    }
+
+    function drawEnding() {
+      ctx.fillStyle = 'rgba(0,0,0,0.88)'; ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffee44'; ctx.font = '16px "Press Start 2P"';
+      ctx.fillText('ESCAPED!', W / 2, H * 0.30);
+      ctx.fillStyle = '#ffffff'; ctx.font = '10px "Press Start 2P"';
+      ctx.fillText('TIME  ' + (elapsed / 60).toFixed(2) + 's', W / 2, H * 0.48);
+      if (hi > 0 && score >= hi) { ctx.fillStyle = '#ffff00'; ctx.font = '6px "Press Start 2P"'; ctx.fillText('NEW BEST TIME!', W / 2, H * 0.58); }
+      ctx.fillStyle = '#668'; ctx.font = '5px "Press Start 2P"';
+      ctx.fillText('PRESS ENTER TO SAVE', W / 2, H * 0.80);
+    }
+
+    function drawDead() {
+      ctx.fillStyle = 'rgba(0,0,0,0.88)'; ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ff2222'; ctx.font = '18px "Press Start 2P"'; ctx.fillText('YOU DIED', W / 2, H * 0.35);
+      ctx.fillStyle = '#ffffff'; ctx.font = '7px "Press Start 2P"';
+      ctx.fillText('TIME LOST AT ' + (elapsed / 60).toFixed(1) + 's', W / 2, H * 0.52);
+      ctx.fillStyle = '#668'; ctx.font = '5px "Press Start 2P"';
+      ctx.fillText('PRESS SPACE TO RETRY', W / 2, H * 0.72);
+    }
+
+    function drawGameOver() {
+      ctx.fillStyle = 'rgba(0,0,0,0.88)'; ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#44ff44'; ctx.font = '14px "Press Start 2P"'; ctx.fillText('CLEAR', W / 2, H * 0.15);
+      ctx.fillStyle = '#ffffff'; ctx.font = '9px "Press Start 2P"'; ctx.fillText('TIME ' + (elapsed / 60).toFixed(2) + 's', W / 2, H * 0.24);
+      if (hi > 0 && score >= hi) { ctx.fillStyle = '#ffff00'; ctx.font = '6px "Press Start 2P"'; ctx.fillText('NEW BEST TIME!', W / 2, H * 0.31); }
+      ctx.fillStyle = '#00ccff'; ctx.font = '7px "Press Start 2P"'; ctx.fillText('ENTER NAME', W / 2, H * 0.40);
+      nameBlinkT++;
+      const fs = 16;
+      for (let i = 0; i < 3; i++) {
+        const cx = W / 2 - 28 + i * 28;
+        const isA = i === namePos;
+        if (isA) { ctx.fillStyle = '#ffff00'; ctx.font = '6px "Press Start 2P"'; ctx.fillText('\u25B2', cx, H * 0.46); ctx.fillText('\u25BC', cx, H * 0.60); }
+        ctx.font = fs + 'px "Press Start 2P"';
+        ctx.fillStyle = isA ? (Math.floor(nameBlinkT / 15) % 2 === 0 ? '#ffff00' : '#ffffff') : '#ffffff';
+        ctx.fillText(nameChars[i], cx, H * 0.54);
+      }
+      ctx.fillStyle = '#668'; ctx.font = '5px "Press Start 2P"';
+      ctx.fillText('ARROWS:SELECT  ENTER:OK', W / 2, H * 0.72);
+    }
+
+    function drawRanking() {
+      ctx.fillStyle = 'rgba(0,0,0,0.9)'; ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffff00'; ctx.font = '14px "Press Start 2P"'; ctx.fillText('TOP 10', W / 2, H * 0.1);
+      const colRank = W * 0.15, colName = W * 0.38, colTime = W * 0.78;
+      ctx.font = '6px "Press Start 2P"'; ctx.fillStyle = '#ff4444';
+      ctx.textAlign = 'center'; ctx.fillText('RANK', colRank, H * 0.17);
+      ctx.textAlign = 'left'; ctx.fillText('NAME', colName, H * 0.17);
+      ctx.textAlign = 'right'; ctx.fillText('TIME', colTime, H * 0.17);
+      for (let i = 0; i < Math.min(10, rankingData.length); i++) {
+        const r = rankingData[i]; const y = H * 0.24 + i * H * 0.055;
+        ctx.font = '8px "Press Start 2P"';
+        ctx.fillStyle = i === 0 ? '#ffff00' : (i < 3 ? '#ff6666' : '#aaaaaa');
+        ctx.textAlign = 'center'; ctx.fillText(String(i + 1).padStart(2, ' '), colRank, y);
+        ctx.fillStyle = i === 0 ? '#ffff00' : (i < 3 ? '#ffee66' : '#ffffff');
+        ctx.textAlign = 'left'; ctx.fillText(r.name, colName, y);
+        ctx.fillStyle = '#ffffff';
+        const tSec = Math.max(0, (TIME_MAX - r.score) / 60);
+        ctx.textAlign = 'right'; ctx.fillText(tSec.toFixed(2) + 's', colTime, y);
+      }
+      if (rankingData.length === 0) { ctx.textAlign = 'center'; ctx.fillStyle = '#666'; ctx.font = '7px "Press Start 2P"'; ctx.fillText('NO RECORDS YET', W / 2, H * 0.5); }
+      ctx.textAlign = 'center'; ctx.fillStyle = '#668'; ctx.font = '5px "Press Start 2P"';
+      ctx.fillText('SPACE: NEW GAME', W / 2, H * 0.95);
+    }
+
+    function draw() {
+      if (state === 'title') { drawTitle(); return; }
+      if (state === 'playing' || state === 'gameover' || state === 'ending' || state === 'dead') {
+        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+        drawFloorCeiling();
+        drawWalls();
+        drawButtons();
+        drawPickups();
+        drawEnemies();
+        drawHUD();
+        drawMinimap();
+      }
+      if (state === 'ending') drawEnding();
+      if (state === 'dead') drawDead();
+      if (state === 'gameover') drawGameOver();
+      if (state === 'ranking') drawRanking();
+    }
+
+    function loop() { update(); draw(); requestAnimationFrame(loop); }
+    spawnLevel();
+    loop();
+  </script>
+</body>
+
+</html>

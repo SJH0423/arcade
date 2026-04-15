@@ -1,0 +1,7 @@
+user_data/db/*.db
+user_data/db/*.db-wal
+user_data/db/*.db-shm
+user_data/logs/
+user_data/cache/
+__pycache__/
+*.pyc

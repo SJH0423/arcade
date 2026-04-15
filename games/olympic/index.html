@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>WORLD ATHLETICS</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box}
+body{background:#0a0a14;color:#fff;font-family:'Press Start 2P',monospace;margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+#backBtn{position:fixed;top:12px;left:12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#94a3b8;font-size:10px;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:'Press Start 2P',monospace;text-decoration:none}
+h1{
+  font-family:'Press Start 2P',monospace;
+  font-weight:normal;
+  font-size:36px;
+  line-height:1.3;
+  color:#fbbf24;
+  margin:40px 0 30px;
+  padding-bottom:10px;
+  letter-spacing:2px;
+  text-shadow:
+    2px 2px 0 #dc2626,
+    3px 3px 0 #b91c1c,
+    4px 4px 0 #991b1b,
+    5px 5px 0 #7f1d1d;
+  text-align:center;
+}
+.sub{font-size:8px;color:#94a3b8;margin-top:8px;margin-bottom:34px}
+.scorebar{background:#1e293b;border:2px solid #334155;border-radius:8px;padding:18px 24px;width:100%;max-width:540px;text-align:center;margin-bottom:8px}
+.scorebar.registered{border-color:#22c55e;background:#052e1f}
+.registered-banner{background:#052e1f;border:2px solid #22c55e;border-radius:8px;padding:24px;width:100%;max-width:540px;text-align:center;margin:16px 0}
+.registered-banner .reg-title{font-size:18px;color:#22c55e;margin-bottom:14px}
+.registered-banner .reg-rank{font-size:36px;color:#fbbf24;margin:14px 0}
+.registered-banner .reg-name{font-size:14px;color:#fff;margin:8px 0}
+.registered-banner .reg-msg{font-size:8px;color:#94a3b8;margin-top:14px;line-height:1.7}
+.card.submitted{cursor:not-allowed;opacity:0.45}
+.scorebar .total{font-size:14px;color:#fff;margin-bottom:6px}
+.scorebar .totalnum{font-size:24px;color:#fbbf24;margin:8px 0}
+.scorebar .progress{height:12px;background:#0f172a;border-radius:6px;overflow:hidden;margin-top:8px}
+.scorebar .progressbar{height:100%;background:linear-gradient(90deg,#fbbf24,#f97316);transition:width 0.3s}
+.medal{font-size:10px;margin-top:10px}
+.medal.gold{color:#fbbf24}
+.medal.silver{color:#cbd5e1}
+.medal.bronze{color:#d97706}
+.medal.none{color:#475569}
+
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:100%;max-width:540px;margin:18px 0}
+.card{background:#1e293b;border:2px solid #334155;border-radius:8px;padding:14px 10px;cursor:pointer;transition:all 0.15s;text-align:center;position:relative}
+.card:hover:not(.done):not(.coming){border-color:#fbbf24;transform:translateY(-2px)}
+.card.done{border-color:#22c55e;cursor:not-allowed}
+.card.done::after{content:'🔒 LOCKED';position:absolute;top:6px;right:8px;font-size:6px;color:#22c55e}
+.card.coming{cursor:not-allowed;opacity:0.45;border-color:#475569;background:#0f172a}
+.card.coming::after{content:'예정';position:absolute;top:6px;right:8px;font-size:6px;color:#64748b}
+.card.coming .name{color:#64748b}
+.card.coming .status{color:#475569}
+.card .name{font-size:9px;color:#fff;margin-bottom:4px}
+.card .kor{font-size:7px;color:#94a3b8;margin-bottom:8px}
+.card .status{font-size:7px;color:#fbbf24;margin-top:6px;min-height:18px}
+.card .raw{font-size:8px;color:#fff}
+.card .pts{font-size:9px;color:#22c55e;margin-top:2px}
+.card.done .name{color:#22c55e}
+
+.actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:16px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:12px 20px;background:#1e293b;color:#a5f3fc;border:2px solid #22d3ee;cursor:pointer;border-radius:6px}
+.btn:hover{background:#22d3ee;color:#000}
+.btn.primary{background:#fbbf24;color:#000;border-color:#fbbf24}
+.btn.primary:hover{background:#fff;border-color:#fff}
+.btn.warn{color:#ef4444;border-color:#ef4444}
+.btn.warn:hover{background:#ef4444;color:#000}
+.btn:disabled{opacity:0.4;cursor:not-allowed}
+
+.modal{position:fixed;inset:0;background:rgba(0,0,0,0.85);display:none;align-items:center;justify-content:center;z-index:100}
+.modal.show{display:flex}
+.modal-box{background:#1e293b;border:2px solid #fbbf24;border-radius:8px;padding:30px;text-align:center;max-width:400px}
+.modal-box h2{font-size:14px;color:#fbbf24;margin:0 0 16px}
+.modal-box p{font-size:8px;color:#fff;margin:8px 0;line-height:1.6}
+.modal-box input{font-family:'Press Start 2P',monospace;font-size:14px;padding:8px;width:100px;text-align:center;background:#0f172a;color:#fbbf24;border:1px solid #fbbf24;text-transform:uppercase;margin:12px 0}
+.name-slots{display:flex;justify-content:center;gap:14px;margin:18px 0}
+.name-slot{font-family:'Press Start 2P',monospace;font-size:32px;color:#fbbf24;background:#0f172a;border:2px solid #334155;width:46px;height:60px;display:flex;align-items:center;justify-content:center;border-radius:4px}
+.name-slot.active{border-color:#fbbf24;background:#1e293b;box-shadow:0 0 12px rgba(251,191,36,0.4)}
+.name-slot.active::after{content:'▲';position:absolute;font-size:8px;color:#fbbf24;margin-top:-78px;animation:blink 0.6s infinite}
+.name-slot{position:relative}
+@keyframes blink{50%{opacity:0.3}}
+.name-hint{font-size:7px;color:#666;text-align:center;line-height:1.7}
+.ranking{margin-top:30px;width:100%;max-width:540px}
+.ranking h3{font-size:10px;color:#fbbf24;margin-bottom:10px;text-align:center}
+.ranking table{width:100%;font-size:8px;border-collapse:collapse}
+.ranking th{color:#94a3b8;padding:6px;border-bottom:1px solid #334155;font-weight:normal}
+.ranking td{padding:6px;border-bottom:1px solid #1e293b;color:#cbd5e1;text-align:center}
+.ranking tr:nth-child(2) td{color:#fbbf24}
+.ranking tr:nth-child(3) td{color:#cbd5e1}
+.ranking tr:nth-child(4) td{color:#d97706}
+</style>
+</head>
+<body>
+<a id="backBtn" href="../../index.html">← ARCADE</a>
+
+<h1>WORLD ATHLETICS</h1>
+<div class="sub">STADIUM — 2 EVENTS PLAYABLE / 4 COMING SOON</div>
+
+<div class="scorebar" id="scorebar">
+  <div class="total">TOTAL POINTS</div>
+  <div class="totalnum" id="totalNum">0 PTS</div>
+  <div class="medal none" id="medalLabel">— NO MEDAL —</div>
+</div>
+
+<div class="registered-banner" id="registeredBanner" style="display:none">
+  <div class="reg-title">🏆 REGISTERED!</div>
+  <div class="reg-name" id="regName">---</div>
+  <div class="reg-rank" id="regRank">#--</div>
+  <div class="reg-msg">YOUR SCORE HAS BEEN ADDED TO THE LEADERBOARD</div>
+</div>
+
+<div class="grid" id="eventGrid"></div>
+
+<div class="actions">
+  <button class="btn primary" id="submitBtn" disabled>🏆 SUBMIT TO RANKING</button>
+  <button class="btn warn" id="resetBtn">NEW GAME</button>
+  <button class="btn primary" id="playAgainBtn" style="display:none">▶ PLAY AGAIN</button>
+</div>
+
+<div class="ranking">
+  <h3>TOP RANKINGS</h3>
+  <table>
+    <thead><tr><th>RANK</th><th>NAME</th><th>SCORE</th></tr></thead>
+    <tbody id="rankingBody"><tr><td colspan="3">LOADING...</td></tr></tbody>
+  </table>
+</div>
+
+<div class="modal" id="modal">
+  <div class="modal-box">
+    <h2 id="modalTitle">REGISTER YOUR NAME</h2>
+    <p id="modalMsg">3-LETTER INITIALS</p>
+    <div class="name-slots" id="nameSlots">
+      <div class="name-slot active" data-i="0">A</div>
+      <div class="name-slot" data-i="1">A</div>
+      <div class="name-slot" data-i="2">A</div>
+    </div>
+    <div class="name-hint">↑ ↓ : LETTER &nbsp;&nbsp; ← → : POSITION &nbsp;&nbsp; ENTER : CONFIRM</div>
+    <div style="margin-top:18px"><button class="btn primary" id="modalConfirm">CONFIRM</button> <button class="btn" id="modalCancel">CANCEL</button></div>
+  </div>
+</div>
+
+<script>
+// ===== Shared session schema =====
+const SESSION_KEY = 'olympicSession';
+const EVENTS = [
+  {id:'100m',     name:'100M',       kor:'100m 단거리', file:'100m.html',     unit:'s', max:1000, playable:true},
+  {id:'longjump', name:'LONG JUMP',  kor:'멀리뛰기',    file:'longjump.html', unit:'m', max:1000, playable:false},
+  {id:'javelin',  name:'JAVELIN',    kor:'창던지기',    file:'javelin.html',  unit:'m', max:1000, playable:false},
+  {id:'hurdles',  name:'HURDLES',    kor:'110m 허들',   file:'hurdles.html',  unit:'s', max:1000, playable:false},
+  {id:'highjump', name:'HIGH JUMP',  kor:'높이뛰기',    file:'highjump.html', unit:'m', max:1000, playable:false},
+  {id:'hammer',   name:'HAMMER',     kor:'해머던지기',  file:'hammer.html',   unit:'m', max:1000, playable:false},
+];
+const PLAYABLE = EVENTS.filter(e => e.playable);
+// Medal thresholds based on approximate per-event gold/silver/bronze
+// Typical 100m: gold ~9000, silver ~7000, bronze ~5000 (per event)
+const MEDAL_GOLD = 9000 * PLAYABLE.length;
+const MEDAL_SILVER = 7000 * PLAYABLE.length;
+const MEDAL_BRONZE = 5000 * PLAYABLE.length;
+
+function loadSession(){
+  try{
+    const s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+    if(s && s.events) return s;
+  }catch(e){}
+  return newSession();
+}
+function newSession(){
+  const events = {};
+  EVENTS.forEach(e => { events[e.id] = null; });
+  return {startedAt: Date.now(), events};
+}
+function saveSession(s){ localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
+
+let session = loadSession();
+let submitted = false;
+let myRank = null;
+let myName = null;
+
+function totalPts(){
+  let t = 0;
+  for(const e of PLAYABLE){ const r = session.events[e.id]; if(r) t += r.pts; }
+  return t;
+}
+function completed(){ return PLAYABLE.filter(e => session.events[e.id]).length; }
+function allDone(){ return completed() === PLAYABLE.length; }
+function medal(t){
+  if(t >= MEDAL_GOLD) return {name:'🥇 GOLD MEDAL', cls:'gold'};
+  if(t >= MEDAL_SILVER) return {name:'🥈 SILVER MEDAL', cls:'silver'};
+  if(t >= MEDAL_BRONZE) return {name:'🥉 BRONZE MEDAL', cls:'bronze'};
+  return {name:'— NO MEDAL —', cls:'none'};
+}
+
+function render(){
+  const t = totalPts();
+  document.getElementById('totalNum').textContent = t.toLocaleString() + ' PTS';
+  const m = medal(t);
+  const ml = document.getElementById('medalLabel');
+  ml.textContent = m.name;
+  ml.className = 'medal ' + m.cls;
+
+  // Toggle registered state UI
+  document.getElementById('scorebar').classList.toggle('registered', submitted);
+  document.getElementById('registeredBanner').style.display = submitted ? 'block' : 'none';
+  if(submitted){
+    document.getElementById('regName').textContent = myName || '---';
+    document.getElementById('regRank').textContent = myRank ? '#' + myRank : '#--';
+  }
+
+  const grid = document.getElementById('eventGrid');
+  grid.innerHTML = '';
+  EVENTS.forEach(e => {
+    const r = session.events[e.id];
+    const card = document.createElement('div');
+    let cls = 'card';
+    if(submitted) cls += ' submitted';
+    if(!e.playable) cls += ' coming';
+    else if(r) cls += ' done';
+    card.className = cls;
+
+    let statusHtml;
+    if(!e.playable){
+      statusHtml = '<div class="status">COMING SOON</div>';
+    } else if(r){
+      statusHtml = '<div class="status"><div class="raw">' + r.raw.toFixed(2) + e.unit + '</div><div class="pts">' + r.pts + ' PTS</div></div>';
+    } else {
+      statusHtml = '<div class="status">▶ PLAY</div>';
+    }
+    card.innerHTML =
+      '<div class="name">' + e.name + '</div>' +
+      '<div class="kor">' + e.kor + '</div>' +
+      statusHtml;
+
+    if(e.playable && !r && !submitted){
+      card.onclick = () => { location.href = e.file; };
+    }
+    grid.appendChild(card);
+  });
+
+  // Action buttons swap based on state
+  document.getElementById('submitBtn').style.display = submitted ? 'none' : '';
+  document.getElementById('resetBtn').style.display = submitted ? 'none' : '';
+  document.getElementById('playAgainBtn').style.display = submitted ? '' : 'none';
+  document.getElementById('submitBtn').disabled = !allDone();
+}
+
+document.getElementById('resetBtn').onclick = () => {
+  session = newSession();
+  saveSession(session);
+  render();
+};
+
+// ===== Submit modal (classic arcade-style name entry) =====
+const modal = document.getElementById('modal');
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+let nameChars = ['A','A','A'];
+let namePos = 0;
+
+function renderNameSlots(){
+  const slots = document.querySelectorAll('#nameSlots .name-slot');
+  slots.forEach((s, i) => {
+    s.textContent = nameChars[i];
+    s.classList.toggle('active', i === namePos);
+  });
+}
+
+document.getElementById('submitBtn').onclick = () => {
+  if(!allDone()) return;
+  nameChars = ['A','A','A'];
+  namePos = 0;
+  renderNameSlots();
+  modal.classList.add('show');
+};
+document.getElementById('modalCancel').onclick = () => { modal.classList.remove('show'); };
+
+async function submitName(){
+  const name = nameChars.join('');
+  const t = totalPts();
+  try{
+    const res = await fetch('/api/ranking/olympic', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name, score:t, level: completed()})
+    });
+    const data = await res.json();
+    renderRanking(data);
+    // Find my rank in the returned list (top match by name+score)
+    const idx = data.findIndex(r => r.name === name && r.score === t);
+    myRank = idx >= 0 ? idx + 1 : null;
+  }catch(e){
+    alert('등록 실패: ' + e.message);
+    return;
+  }
+  myName = name;
+  submitted = true;
+  modal.classList.remove('show');
+  render();
+}
+
+document.getElementById('playAgainBtn').onclick = () => {
+  submitted = false;
+  myRank = null;
+  myName = null;
+  session = newSession();
+  saveSession(session);
+  render();
+};
+document.getElementById('modalConfirm').onclick = submitName;
+
+// Slot click navigation
+document.querySelectorAll('#nameSlots .name-slot').forEach(slot => {
+  slot.addEventListener('click', () => {
+    namePos = parseInt(slot.dataset.i);
+    renderNameSlots();
+  });
+});
+
+// Keyboard input (only when modal is open)
+window.addEventListener('keydown', e => {
+  if(!modal.classList.contains('show')) return;
+  if(e.code === 'ArrowUp'){
+    const idx = ALPHABET.indexOf(nameChars[namePos]);
+    nameChars[namePos] = ALPHABET[(idx + 1) % ALPHABET.length];
+    renderNameSlots();
+    e.preventDefault();
+  } else if(e.code === 'ArrowDown'){
+    const idx = ALPHABET.indexOf(nameChars[namePos]);
+    nameChars[namePos] = ALPHABET[(idx - 1 + ALPHABET.length) % ALPHABET.length];
+    renderNameSlots();
+    e.preventDefault();
+  } else if(e.code === 'ArrowLeft'){
+    namePos = Math.max(0, namePos - 1);
+    renderNameSlots();
+    e.preventDefault();
+  } else if(e.code === 'ArrowRight'){
+    namePos = Math.min(2, namePos + 1);
+    renderNameSlots();
+    e.preventDefault();
+  } else if(e.code === 'Enter'){
+    submitName();
+    e.preventDefault();
+  } else if(e.code === 'Escape'){
+    modal.classList.remove('show');
+    e.preventDefault();
+  }
+});
+
+// ===== Ranking display =====
+function renderRanking(data){
+  const tbody = document.getElementById('rankingBody');
+  if(!data || !data.length){
+    tbody.innerHTML = '<tr><td colspan="4">NO RECORDS YET</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.slice(0,10).map((r,i) =>
+    '<tr><td>' + (i+1) + '</td><td>' + r.name + '</td><td>' + (r.score||0).toLocaleString() + '</td></tr>'
+  ).join('');
+}
+fetch('/api/ranking/olympic').then(r=>r.json()).then(renderRanking).catch(()=>{
+  document.getElementById('rankingBody').innerHTML = '<tr><td colspan="3">OFFLINE</td></tr>';
+});
+
+render();
+</script>
+</body>
+</html>

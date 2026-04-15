@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>WORLD ATHLETICS - LONG JUMP</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+body{background:#000;overflow:hidden;touch-action:none;font-family:'Press Start 2P',monospace;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
+canvas{background:#1a1a2e;image-rendering:pixelated;image-rendering:-moz-crisp-edges;max-width:100vw;max-height:100vh}
+.touch{position:fixed;bottom:18px;display:flex;gap:14px;z-index:50;width:100%;justify-content:center}
+.tbtn{width:72px;height:72px;border:2px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.08);color:#fff;border-radius:50%;font-family:'Press Start 2P',monospace;font-size:18px;display:flex;align-items:center;justify-content:center}
+.tbtn.jump{border-color:rgba(251,191,36,0.5);background:rgba(251,191,36,0.15);font-size:14px}
+#backBtn{position:fixed;top:12px;left:12px;z-index:200;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#94a3b8;font-size:10px;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:'Press Start 2P',monospace;text-decoration:none}
+</style>
+</head>
+<body>
+<a id="backBtn" href="index.html">← STADIUM</a>
+<canvas id="c" width="800" height="400"></canvas>
+<div class="touch">
+  <div class="tbtn" id="tL">A</div>
+  <div class="tbtn jump" id="tJump">JUMP</div>
+  <div class="tbtn" id="tR">D</div>
+</div>
+<script>
+// ===== Shared session schema =====
+const SESSION_KEY = 'olympicSession';
+const EVENT_ID = 'longjump';
+function loadSession(){ try{ return JSON.parse(localStorage.getItem(SESSION_KEY)||'null') || null; }catch(e){ return null; } }
+function saveResult(raw, pts){
+  let s = loadSession() || {startedAt:Date.now(), events:{}};
+  s.events = s.events || {};
+  s.events[EVENT_ID] = {raw, pts};
+  localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+}
+// Points: 3m = 0, no upper cap. distance in meters.
+function calcPoints(distMeters){
+  return Math.max(0, Math.round((distMeters - 3) * 1500));
+}
+
+// ===== Sprite (16x24, 6 frames) — shared with 100m =====
+const COLORS = {'.':null,'S':'#fdba74','H':'#0f0f0f','B':'#dc2626','W':'#fef3c7','P':'#1e3a8a','F':'#0f0f0f','O':'#f97316'};
+const SPRITE_W = 16, SPRITE_H = 24;
+const FRAMES = [
+[ '......HHHH......','.....HHHHHH.....','.....HSSSH......','.....SSSSS......','.....SSSSS......','....BBBBBBB.....','...BBBBBBBBS....','..SBWBBBBWBB....','...BBBBBBBB.....','...BBBBBBBB.....','...PPPPPPPP.....','...PPPPPPPP.....','...PP....PP.....','..SS......PP....','..S........PP...','.SS.........SS..','.SS.........SS..','..S..........S..','..S..........S..','..SS........SS..','..FF........FF..','.FOFF......FFOF.','.FFFF......FFFF.','................' ],
+[ '......HHHH......','.....HHHHHH.....','.....HSSSH......','.....SSSSS......','.....SSSSS......','.....BBBBB......','....BBBBBBB.....','...BBBWWBBB.....','....BBBBBB......','....BBBBBB......','....PPPPPP......','....PPPPPP......','....PP..PP......','....PP..PP......','....SS..SS......','....SS..SS......','....SS..SS......','....SS..SS......','....SS..SS......','....FF..FF......','...FOFF.FFOF....','...FFFF.FFFF....','................','................' ],
+[ '......HHHH......','.....HHHHHH.....','.....HSSSH......','.....SSSSS......','.....SSSSS......','.....BBBBBBB....','....SBBBBBBBB...','....BBWBBBBWBS..','.....BBBBBBBB...','.....BBBBBBBB...','.....PPPPPPPP...','.....PPPPPPPP...','.....PP....PP...','....PP......SS..','...PP........S..','..SS.........SS.','..SS.........SS.','..S...........S.','..S...........S.','..SS.........SS.','..FF.........FF.','.FOFF.......FFOF','.FFFF.......FFFF','................' ],
+[ '......HHHH......','.....HHHHHH.....','.....HSSSH......','.....SSSSS......','.....SSSSS......','.....BBBBB......','....BBBBBBB.....','...BBBWWBBB.....','....BBBBBB......','....BBBBBB......','....PPPPPP......','....PPPPPP......','....PP..PP......','....PP..PP......','....SS..SS......','....SS..SS......','....SS..SS......','....SS..SS......','....SS..SS......','....FF..FF......','...FOFF.FFOF....','...FFFF.FFFF....','................','................' ],
+[ '......HHHH......','.....HHHHHH.....','.....HSSSH......','.....SSSSS......','.....SSSSS......','...BBBBBBBB.....','..BBBBBBBBSS....','.SBBWBBBBWBB....','..BBBBBBBB......','..BBBBBBBB......','..PPPPPPPP......','..PPPPPPPP......','..PP.....PP.....','.SS.......PPP...','SS.........PPS..','S...........SSS.','S............SS.','.S............S.','.SS...........S.','..S..........SS.','..FF........FF..','.FFOF.......FFOF','.FFFF.......FFFF','................' ],
+[ '......HHHH......','.....HHHHHH.....','.....HSSSH......','.....SSSSS......','.....SSSSS......','.....BBBBBBBB...','....SBBBBBBBBB..','....BBBWBBBBWBS.','......BBBBBBBB..','......BBBBBBBB..','......PPPPPPPP..','......PPPPPPPP..','.....PP.....PP..','...PPP.......SS.','..SPP.........SS','.SSS...........S','.SS............S','.S............S.','S............SS.','SS..........S...','.FF........FF...','FOFF.......FOFF.','FFFF.......FFFF.','................' ],
+];
+// Victory/Defeat poses
+const VICTORY_FRAME = [
+  '................','................','................','................','.S............S.','SS............SS','.SS..........SS.','.SS....HH....SS.','..SS..HHHH..SS..','..SS.HSSSH..SS..','..SS..SSS...SS..','...SS......SS...','....SBBBBBBS....','.....BBBBBB.....','....BBBBBBBB....','.....BBBBBB.....','.....BBBBBB.....','.....PPPPPP.....','.....PPPPPP.....','.....PP..PP.....','.....SS..SS.....','.....SS..SS.....','.....FF..FF.....','....FFF..FFF....',
+];
+const DEFEAT_FRAME = [
+  '................','................','................','................','................','................','................','.HHHH...........','HSSSH...........','.SSS............','.BBBBBBBBBBB....','.BBBBBBBBBBB....','..BBBBBBBBPP....','..BBBBBBBPPP....','..SSS....PPPP...','..SSSS...PPPP...','..SSSS....PPP...','...SSS.....PP...','....SS.....PP...','....FF.....SS...','...........SS...','...........SS...','...........FF...','..........FFFF..',
+];
+
+function renderSprite(ctx, frameOrIdx, ox, oy, scale){
+  const f = (typeof frameOrIdx === 'number') ? FRAMES[frameOrIdx] : frameOrIdx;
+  for(let y=0;y<SPRITE_H;y++){
+    const row = f[y];
+    for(let x=0;x<SPRITE_W;x++){
+      const col = COLORS[row[x]];
+      if(col){ ctx.fillStyle = col; ctx.fillRect(ox+x*scale, oy+y*scale, scale, scale); }
+    }
+  }
+}
+
+function drawTears(ox, oy, scale){
+  const eyeX = ox + 2 * scale + Math.floor(scale / 2);
+  const eyeY = oy + 9 * scale;
+  const t = Date.now() * 0.0028;
+  const FALL = 14 * scale;
+  for(let i = 0; i < 3; i++){
+    const phase = (t + i * 0.34) % 1;
+    const ty = eyeY + phase * FALL;
+    const alpha = phase < 0.85 ? 1 : (1 - (phase - 0.85) / 0.15);
+    ctx.fillStyle = 'rgba(125,211,252,' + alpha + ')';
+    ctx.fillRect(eyeX - 1, ty, 3, 5);
+    ctx.fillRect(eyeX, ty - 1, 1, 1);
+  }
+}
+
+// ===== Game =====
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+const W = 800, H = 400;
+
+const AC = new (window.AudioContext || window.webkitAudioContext)();
+function snd(f,d,t,v){const o=AC.createOscillator(),g=AC.createGain();o.type=t||'square';o.frequency.value=f;g.gain.setValueAtTime(v||0.08,AC.currentTime);g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+d);o.connect(g);g.connect(AC.destination);o.start();o.stop(AC.currentTime+d);}
+
+// Round system
+const MAX_ROUNDS = 3;
+const ROUND_TIMEOUT_MS = 15000;
+const AUTO_ADVANCE_MS = 10000;
+let state = 'title';  // title / countdown / running / jumping / airborne / roundEnd / final
+let currentRound = 1;
+let roundResults = [];
+let result = null;
+let roundEndAt = 0;
+let roundStartMs = 0;
+
+// Running phase
+const MAX_SPEED = 11;
+const PRESS_GAIN = 0.38;
+const DECAY = 0.065;
+const METERS_PER_SPEED = 0.045;
+const RUNWAY_LENGTH = 40;  // meters
+const FOUL_MARGIN = 3;     // extra meters past takeoff line = foul
+const PIXELS_PER_METER = 18;
+let speed = 0, dist = 0, elapsed = 0, lastKey = null, flashTimer = 0;
+let frameTimer = 0, curFrame = 0;
+
+// Jump phase
+const ANGLE_SPEED = 2.4;      // degrees per frame (oscillation)
+const JUMP_POWER = 0.95;      // distance = speed * power * sin(2*angle)
+let angle = 0;
+let angleDir = 1;
+let angleLocked = 0;
+
+// Airborne phase
+const AIRBORNE_FRAMES = 75;
+let airborneFrame = 0;
+let takeoffDist = 0;
+let takeoffSpeed = 0;
+let jumpDistance = 0;
+
+// Countdown
+let countdownStart = 0;
+
+function reset(){
+  state = 'title';
+  currentRound = 1;
+  roundResults = [];
+  result = null;
+  speed = 0; dist = 0; elapsed = 0; lastKey = null;
+  frameTimer = 0; curFrame = 0;
+  angle = 0; angleLocked = 0;
+  airborneFrame = 0; takeoffDist = 0; takeoffSpeed = 0; jumpDistance = 0;
+}
+
+function startCountdown(){
+  state = 'countdown';
+  countdownStart = Date.now();
+  AC.resume();
+}
+
+function startRun(){
+  state = 'running';
+  speed = 0; dist = 0; elapsed = 0; lastKey = null;
+  frameTimer = 0; curFrame = 0;
+  angle = 0; angleLocked = 0;
+  airborneFrame = 0; jumpDistance = 0;
+  roundStartMs = Date.now();
+  snd(800, 0.15, 'square', 0.12);
+}
+
+function startNextRound(){
+  currentRound++;
+  startCountdown();
+}
+
+function beginJump(){
+  // Player pressed jump during running phase
+  state = 'jumping';
+  takeoffDist = dist;
+  takeoffSpeed = speed;
+  angle = 0;
+  angleDir = 1;
+  snd(500, 0.08, 'square', 0.1);
+}
+
+function lockJumpAngle(){
+  // Player pressed jump during angle selection
+  angleLocked = angle;
+  const angleRad = angle * Math.PI / 180;
+  jumpDistance = Math.max(0, takeoffSpeed * JUMP_POWER * Math.sin(2 * angleRad));
+  state = 'airborne';
+  airborneFrame = 0;
+  snd(700, 0.12, 'sine', 0.12);
+}
+
+function finishRound(opts){
+  opts = opts || {};
+  const foul = !!opts.foul;
+  const forfeited = !!opts.forfeited;
+  let distance = 0;
+  let pts = 0;
+  if(!foul && !forfeited){
+    distance = takeoffDist > 0 ? jumpDistance : 0;
+    pts = calcPoints(distance);
+  }
+  const entry = {distance, pts, foul, forfeited};
+  roundResults.push(entry);
+  result = entry;
+  roundEndAt = Date.now();
+  if(pts > 0){
+    snd(600, 0.2, 'sine'); setTimeout(()=>snd(900, 0.3, 'sine'), 150);
+  } else {
+    snd(220, 0.4, 'sawtooth', 0.1);
+    setTimeout(()=>snd(180, 0.4, 'sawtooth', 0.1), 200);
+  }
+  if(currentRound >= MAX_ROUNDS){
+    state = 'final';
+    const bestPts = roundResults.reduce((m, r) => Math.max(m, r.pts), 0);
+    const bestRound = roundResults.find(r => r.pts === bestPts) || roundResults[0];
+    saveResult(bestRound.distance, bestPts);
+  } else {
+    state = 'roundEnd';
+  }
+}
+
+function bestPtsSoFar(){
+  return roundResults.reduce((m, r) => Math.max(m, r.pts), 0);
+}
+
+// ===== Input =====
+function pressKey(side){
+  if(state === 'title'){ startCountdown(); return; }
+  if(state !== 'running') return;
+  if(lastKey !== side){
+    speed = Math.min(MAX_SPEED, speed + PRESS_GAIN);
+    lastKey = side;
+    flashTimer = 4;
+  }
+}
+
+function pressJump(){
+  if(state === 'running') beginJump();
+  else if(state === 'jumping') lockJumpAngle();
+  else if(state === 'title') startCountdown();
+  else if(state === 'roundEnd') startNextRound();
+}
+
+window.addEventListener('keydown', e => {
+  if(e.code === 'ArrowLeft' || e.code === 'KeyA') pressKey('L');
+  else if(e.code === 'ArrowRight' || e.code === 'KeyD') pressKey('R');
+  else if(e.code === 'Space'){
+    if(state==='title') startCountdown();
+    else if(state==='running') beginJump();
+    else if(state==='jumping') lockJumpAngle();
+    else if(state==='roundEnd') startNextRound();
+  }
+  else if(e.code === 'Enter'){
+    if(state==='title') startCountdown();
+    else if(state==='final') location.href='olympic.html';
+    else if(state==='roundEnd') startNextRound();
+  }
+  else if(e.code === 'Escape'){ location.href='olympic.html'; }
+});
+
+function addT(el, fn){
+  el.addEventListener('touchstart', e => { e.preventDefault(); fn(); }, {passive:false});
+  el.addEventListener('mousedown', e => { e.preventDefault(); fn(); });
+}
+addT(document.getElementById('tL'), () => pressKey('L'));
+addT(document.getElementById('tR'), () => pressKey('R'));
+addT(document.getElementById('tJump'), pressJump);
+
+canvas.addEventListener('touchstart', e => {
+  if(state==='roundEnd' && Date.now() - roundEndAt > 800) startNextRound();
+  else if(state==='final' && Date.now() - roundEndAt > 800) location.href='olympic.html';
+}, {passive:true});
+
+// ===== Drawing =====
+function worldToScreen(worldM, scrollX){
+  return worldM * PIXELS_PER_METER - scrollX;
+}
+
+function drawScene(){
+  // Camera: player at screen x = W*0.25 until near takeoff, then fixed view
+  let playerScreenTargetX = W * 0.25;
+  // During airborne, keep player visible; if jump is long, allow camera to pan
+  const scrollX = Math.max(0, dist * PIXELS_PER_METER - playerScreenTargetX);
+
+  // Sky
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, 0, W, 200);
+  // Distant stadium
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(0, 160, W, 40);
+  // Crowd dots
+  for(let i=0; i<200; i++){
+    const x = ((i*9) - (scrollX*0.1 % 9));
+    const y = 165 + ((i*3)%32);
+    ctx.fillStyle = ['#475569','#64748b','#334155','#7c2d12','#dc2626','#1e40af'][i%6];
+    ctx.fillRect(x, y, 3, 3);
+  }
+  ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 198, W, 4);
+
+  // Runway (brown clay) from worldX 0 to RUNWAY_LENGTH
+  ctx.fillStyle = '#7c2d12';
+  const runwayStartX = worldToScreen(0, scrollX);
+  const runwayEndX = worldToScreen(RUNWAY_LENGTH, scrollX);
+  ctx.fillRect(Math.max(0, runwayStartX), 202, Math.min(W, runwayEndX) - Math.max(0, runwayStartX), H-202);
+
+  // Sandpit (sand tan) from RUNWAY_LENGTH to RUNWAY_LENGTH + 12
+  ctx.fillStyle = '#e7c080';
+  const sandStartX = runwayEndX;
+  const sandEndX = worldToScreen(RUNWAY_LENGTH + 12, scrollX);
+  if(sandEndX > 0 && sandStartX < W){
+    ctx.fillRect(Math.max(0, sandStartX), 202, sandEndX - Math.max(0, sandStartX), H-202);
+  }
+
+  // Runway lane markings (scrolling dashed lines) within runway area
+  ctx.fillStyle = '#fef3c7';
+  for(let i=0; i<30; i++){
+    const wx = i*3;
+    if(wx > RUNWAY_LENGTH) break;
+    const sx = worldToScreen(wx, scrollX);
+    if(sx > -20 && sx < W){
+      ctx.fillRect(sx, 250, 30, 2);
+      ctx.fillRect(sx, 310, 30, 2);
+    }
+  }
+
+  // Takeoff line (white vertical strip at RUNWAY_LENGTH)
+  const takeoffX = worldToScreen(RUNWAY_LENGTH, scrollX);
+  if(takeoffX > -10 && takeoffX < W+10){
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(takeoffX - 3, 210, 6, H-215);
+    ctx.fillStyle = '#dc2626';
+    ctx.fillRect(takeoffX - 3, 210, 6, 6);
+  }
+
+  // Distance markers on sandpit (4m, 5m, 6m, 7m, 8m, 9m)
+  ctx.fillStyle = '#92400e';
+  for(let m=4; m<=10; m++){
+    const wx = RUNWAY_LENGTH + m;
+    const sx = worldToScreen(wx, scrollX);
+    if(sx > 0 && sx < W){
+      ctx.fillRect(sx, 320, 1, 12);
+      ctx.font = '7px "Press Start 2P"';
+      ctx.textAlign = 'center';
+      ctx.fillText(m + 'm', sx, 346);
+    }
+  }
+
+  // ===== Player =====
+  const playerScale = 4;
+  let playerScreenX = dist * PIXELS_PER_METER - scrollX;
+  let playerBaseY = 310;  // ground line on runway
+
+  // Airborne arc
+  if(state === 'airborne'){
+    const t = airborneFrame / AIRBORNE_FRAMES;
+    // dist moves from takeoffDist to takeoffDist+jumpDistance
+    const currentDist = takeoffDist + jumpDistance * t;
+    const peakH = Math.max(1.5, jumpDistance * 0.3);  // peak height in meters
+    const heightM = 4 * peakH * t * (1 - t);
+    playerScreenX = currentDist * PIXELS_PER_METER - scrollX;
+    playerBaseY = 310 - heightM * PIXELS_PER_METER;
+  }
+
+  if(state === 'jumping'){
+    // Frozen at takeoff pose (use frame 4 = extreme stride)
+    curFrame = 4;
+  }
+
+  // Shadow
+  if(state !== 'airborne'){
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.beginPath();
+    ctx.ellipse(playerScreenX, 311, 22, 4, 0, 0, Math.PI*2);
+    ctx.fill();
+  } else {
+    // faint shadow at ground following player horizontally
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(playerScreenX, 311, 18, 3, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // Draw sprite at playerScreenX/playerBaseY
+  const sx = playerScreenX - SPRITE_W * playerScale / 2;
+  const sy = playerBaseY - SPRITE_H * playerScale + 10;
+
+  // Pose based on state
+  if(state === 'roundEnd' || state === 'final'){
+    const isWin = result && !result.foul && !result.forfeited && result.pts >= 3000;
+    const isGood = result && !result.foul && !result.forfeited;
+    if(isWin){
+      const bounce = Math.max(0, Math.sin(Date.now() * 0.012) * 10);
+      renderSprite(ctx, VICTORY_FRAME, sx, sy - bounce, playerScale);
+    } else if(isGood){
+      // Not great but not foul — just standing frame (passing)
+      renderSprite(ctx, 1, sx, sy, playerScale);
+    } else {
+      // Foul or forfeit — defeat pose
+      renderSprite(ctx, DEFEAT_FRAME, sx, sy, playerScale);
+      drawTears(sx, sy, playerScale);
+    }
+  } else {
+    renderSprite(ctx, curFrame, sx, sy, playerScale);
+  }
+}
+
+function drawHUD(){
+  // Top bar
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(0, 0, W, 56);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fbbf24'; ctx.font = '12px "Press Start 2P"';
+  ctx.fillText('ROUND ' + currentRound + ' / ' + MAX_ROUNDS, W/2, 16);
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#fbbf24'; ctx.font = '8px "Press Start 2P"';
+  ctx.fillText('TIME', 14, 14);
+  const secs = ((Date.now() - roundStartMs) / 1000);
+  const remaining = Math.max(0, ROUND_TIMEOUT_MS/1000 - secs);
+  ctx.fillStyle = remaining < 5 ? '#ef4444' : '#fff'; ctx.font = '12px "Press Start 2P"';
+  ctx.fillText(remaining.toFixed(1) + 's', 14, 30);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fbbf24'; ctx.font = '8px "Press Start 2P"';
+  ctx.fillText('DIST', W/2, 28);
+  ctx.fillStyle = '#fff'; ctx.font = '11px "Press Start 2P"';
+  ctx.fillText(dist.toFixed(1) + 'm / ' + RUNWAY_LENGTH + 'm', W/2, 39);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#fbbf24'; ctx.font = '8px "Press Start 2P"';
+  ctx.fillText('SPEED', W-14, 14);
+  ctx.fillStyle = speed > 8 ? '#22c55e' : speed > 4 ? '#fef3c7' : '#94a3b8';
+  ctx.font = '12px "Press Start 2P"';
+  ctx.fillText((speed/MAX_SPEED*100).toFixed(0)+'%', W-14, 30);
+
+  // Target reference bar (world records)
+  if(state === 'running' || state === 'jumping' || state === 'airborne'){
+    ctx.textAlign = 'left'; ctx.font = '6px "Press Start 2P"';
+    ctx.fillStyle = '#666';
+    ctx.fillText('WR 8.95m   GOLD 8.00m   SILVER 6.50m   BRONZE 5.00m', 10, 388);
+  }
+}
+
+function drawAngleGauge(){
+  if(state !== 'jumping') return;
+  // Half-circle gauge at center-top
+  const cx = W/2, cy = 180, rad = 80;
+  // background arc
+  ctx.beginPath();
+  ctx.arc(cx, cy, rad, Math.PI, Math.PI*2);
+  ctx.strokeStyle = '#1e293b';
+  ctx.lineWidth = 14;
+  ctx.stroke();
+  // ideal zone (around 42°, ±10°)
+  ctx.beginPath();
+  const idealStart = Math.PI + (32/90) * Math.PI;
+  const idealEnd   = Math.PI + (52/90) * Math.PI;
+  ctx.arc(cx, cy, rad, idealStart, idealEnd);
+  ctx.strokeStyle = '#22c55e';
+  ctx.lineWidth = 14;
+  ctx.stroke();
+  // current angle indicator
+  const curAngleRad = Math.PI + (angle/90) * Math.PI;
+  const px = cx + Math.cos(curAngleRad) * rad;
+  const py = cy + Math.sin(curAngleRad) * rad;
+  ctx.fillStyle = '#fbbf24';
+  ctx.beginPath();
+  ctx.arc(px, py, 8, 0, Math.PI*2);
+  ctx.fill();
+  // labels
+  ctx.fillStyle = '#fbbf24'; ctx.font = '10px "Press Start 2P"';
+  ctx.textAlign = 'center';
+  ctx.fillText(Math.round(angle) + '°', cx, cy + 28);
+  ctx.fillStyle = '#fff'; ctx.font = '8px "Press Start 2P"';
+  ctx.fillText('PRESS JUMP TO LOCK', cx, cy + 52);
+}
+
+function drawTitle(){
+  drawScene();
+  ctx.fillStyle = 'rgba(0,0,0,0.75)';
+  ctx.fillRect(0, 40, W, 220);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fbbf24'; ctx.font = '22px "Press Start 2P"';
+  ctx.fillText('LONG JUMP', W/2, 84);
+  ctx.fillStyle = '#fbbf24'; ctx.font = '9px "Press Start 2P"';
+  ctx.fillText('멀리뛰기', W/2, 104);
+  ctx.fillStyle = '#fff'; ctx.font = '9px "Press Start 2P"';
+  ctx.fillText('1. MASH A/D  OR  ← →  TO BUILD SPEED', W/2, 132);
+  ctx.fillText('2. PRESS SPACE TO JUMP BEFORE THE LINE', W/2, 148);
+  ctx.fillText('3. PRESS SPACE AGAIN TO LOCK ANGLE (~42°)', W/2, 164);
+  ctx.fillStyle = '#ef4444'; ctx.font = '7px "Press Start 2P"';
+  ctx.fillText('⚠ OVERSTEP LINE = FOUL       15s TIMEOUT = FORFEIT', W/2, 188);
+  ctx.fillStyle = '#a5f3fc'; ctx.font = '10px "Press Start 2P"';
+  ctx.fillText('PRESS SPACE TO START', W/2, 218);
+  ctx.fillStyle = '#666'; ctx.font = '7px "Press Start 2P"';
+  ctx.fillText('WR 8.95m  GOLD 8m  SILVER 6.5m  BRONZE 5m', W/2, 244);
+}
+
+function drawCountdown(){
+  drawScene();
+  drawHUD();
+  const elap = (Date.now() - countdownStart) / 1000;
+  let txt = '';
+  if(elap < 1) txt = '3';
+  else if(elap < 2) txt = '2';
+  else if(elap < 3) txt = '1';
+  else if(elap < 3.5){ txt = 'GO!'; if(state==='countdown'){ startRun(); } }
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fbbf24'; ctx.font = '20px "Press Start 2P"';
+  ctx.fillText('ROUND ' + currentRound + ' / ' + MAX_ROUNDS, W/2, H/2 - 50);
+  ctx.fillStyle = txt === 'GO!' ? '#22c55e' : '#fbbf24';
+  ctx.font = '60px "Press Start 2P"';
+  ctx.fillText(txt, W/2, H/2 + 30);
+}
+
+function drawRoundEnd(){
+  drawScene();
+  drawHUD();
+
+  const panelX = W - 300;
+  ctx.fillStyle = 'rgba(0,0,0,0.92)';
+  ctx.fillRect(panelX, 30, 290, 340);
+  const borderColor = result.foul || result.forfeited ? '#ef4444' : (result.pts >= 6000 ? '#22c55e' : '#fbbf24');
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(panelX, 30, 290, 340);
+
+  const cx = panelX + 145;
+  ctx.textAlign = 'center';
+
+  // Header
+  ctx.fillStyle = borderColor;
+  ctx.font = '14px "Press Start 2P"';
+  let header;
+  if(result.foul) header = 'FOUL';
+  else if(result.forfeited) header = 'TIMEOUT';
+  else if(result.pts >= 6000) header = 'GOOD JUMP!';
+  else header = 'ROUND DONE';
+  ctx.fillText(header, cx, 60);
+  ctx.fillStyle = '#fff'; ctx.font = '8px "Press Start 2P"';
+  ctx.fillText('ROUND ' + currentRound + ' / ' + MAX_ROUNDS, cx, 80);
+
+  // Distance
+  ctx.fillStyle = '#fbbf24'; ctx.font = '8px "Press Start 2P"';
+  ctx.fillText('DISTANCE', cx, 114);
+  ctx.fillStyle = result.foul || result.forfeited ? '#ef4444' : '#fff';
+  ctx.font = '24px "Press Start 2P"';
+  if(result.foul) ctx.fillText('FOUL', cx, 146);
+  else if(result.forfeited) ctx.fillText('DNF', cx, 146);
+  else ctx.fillText(result.distance.toFixed(2) + 'm', cx, 146);
+
+  // Round pts
+  ctx.fillStyle = '#fbbf24'; ctx.font = '8px "Press Start 2P"';
+  ctx.fillText('ROUND PTS', cx, 178);
+  ctx.fillStyle = result.pts >= 9000 ? '#22c55e' : result.pts >= 6000 ? '#fbbf24' : '#cbd5e1';
+  ctx.font = '18px "Press Start 2P"';
+  ctx.fillText(result.pts.toLocaleString(), cx, 204);
+
+  // Round-by-round
+  ctx.fillStyle = '#666'; ctx.font = '7px "Press Start 2P"';
+  ctx.fillText('R1     R2     R3', cx, 234);
+  for(let i=0; i<MAX_ROUNDS; i++){
+    const x = cx - 60 + i*60;
+    const r = roundResults[i];
+    if(r){
+      ctx.fillStyle = r.pts >= 6000 ? '#22c55e' : r.pts > 0 ? '#fbbf24' : '#ef4444';
+      ctx.font = '9px "Press Start 2P"';
+      ctx.fillText(r.pts > 0 ? r.pts.toLocaleString() : (r.foul ? 'F' : r.forfeited ? 'T' : '0'), x, 252);
+    } else {
+      ctx.fillStyle = '#475569'; ctx.font = '9px "Press Start 2P"';
+      ctx.fillText('--', x, 252);
+    }
+  }
+
+  // Best so far
+  const best = bestPtsSoFar();
+  ctx.fillStyle = '#fbbf24'; ctx.font = '7px "Press Start 2P"';
+  ctx.fillText('BEST SO FAR', cx, 280);
+  ctx.fillStyle = '#fff'; ctx.font = '14px "Press Start 2P"';
+  ctx.fillText(best.toLocaleString() + ' PTS', cx, 300);
+
+  // Auto-advance
+  const elap = Date.now() - roundEndAt;
+  const remain = Math.max(0, AUTO_ADVANCE_MS - elap);
+  ctx.fillStyle = '#1e293b'; ctx.fillRect(panelX+30, 322, 230, 4);
+  ctx.fillStyle = '#22d3ee'; ctx.fillRect(panelX+30, 322, 230 * (remain/AUTO_ADVANCE_MS), 4);
+  ctx.fillStyle = '#a5f3fc'; ctx.font = '7px "Press Start 2P"';
+  ctx.fillText('SPACE: NEXT ROUND  (' + Math.ceil(remain/1000) + 's)', cx, 344);
+}
+
+function drawFinal(){
+  drawScene();
+
+  const best = bestPtsSoFar();
+  const panelX = W - 360;
+  const panelY = 30;
+  const panelW = 350;
+  const panelH = 350;
+  ctx.fillStyle = 'rgba(0,0,0,0.92)';
+  ctx.fillRect(panelX, panelY, panelW, panelH);
+  const borderColor = best >= 6000 ? '#22c55e' : '#fbbf24';
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+  const cx = panelX + panelW/2;
+  ctx.textAlign = 'center';
+
+  ctx.fillStyle = best >= 6000 ? '#22c55e' : '#fbbf24';
+  ctx.font = '16px "Press Start 2P"';
+  ctx.fillText('ALL ROUNDS DONE', cx, 64);
+
+  // Round details
+  ctx.fillStyle = '#94a3b8'; ctx.font = '7px "Press Start 2P"';
+  ctx.fillText('ROUND BREAKDOWN', cx, 100);
+
+  for(let i=0; i<MAX_ROUNDS; i++){
+    const y = 124 + i*32;
+    const r = roundResults[i];
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#fbbf24'; ctx.font = '9px "Press Start 2P"';
+    ctx.fillText('R' + (i+1), panelX+20, y);
+    if(r){
+      if(r.foul){
+        ctx.fillStyle = '#ef4444'; ctx.font = '8px "Press Start 2P"';
+        ctx.fillText('FOUL', panelX+60, y);
+      } else if(r.forfeited){
+        ctx.fillStyle = '#ef4444'; ctx.font = '8px "Press Start 2P"';
+        ctx.fillText('TIMEOUT', panelX+60, y);
+      } else {
+        ctx.fillStyle = '#fff'; ctx.font = '9px "Press Start 2P"';
+        ctx.fillText(r.distance.toFixed(2) + 'm', panelX+60, y);
+      }
+      ctx.textAlign = 'right';
+      ctx.fillStyle = r.pts >= 9000 ? '#22c55e' : r.pts >= 6000 ? '#fbbf24' : '#cbd5e1';
+      ctx.font = '10px "Press Start 2P"';
+      ctx.fillText(r.pts.toLocaleString() + ' PTS', panelX+panelW-20, y);
+    } else {
+      ctx.fillStyle = '#475569'; ctx.font = '8px "Press Start 2P"';
+      ctx.fillText('-- not played --', panelX+60, y);
+    }
+  }
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fbbf24'; ctx.font = '8px "Press Start 2P"';
+  ctx.fillText('BEST ROUND = FINAL SCORE', cx, 248);
+  ctx.fillStyle = best >= 9000 ? '#22c55e' : best >= 6000 ? '#fbbf24' : '#cbd5e1';
+  ctx.font = '24px "Press Start 2P"';
+  ctx.fillText(best.toLocaleString() + ' PTS', cx, 290);
+
+  ctx.fillStyle = '#a5f3fc'; ctx.font = '8px "Press Start 2P"';
+  ctx.fillText('PRESS ENTER FOR STADIUM', cx, 338);
+}
+
+// ===== Loop =====
+function loop(){
+  if(state === 'running'){
+    elapsed++;
+    speed = Math.max(0, speed - DECAY);
+    dist += speed * METERS_PER_SPEED;
+    flashTimer = Math.max(0, flashTimer - 1);
+
+    frameTimer += speed * 0.018;
+    if(frameTimer >= 1){ frameTimer = 0; curFrame = (curFrame + 1) % FRAMES.length; }
+
+    // Foul check
+    if(dist > RUNWAY_LENGTH + FOUL_MARGIN){
+      finishRound({foul:true});
+    }
+    // Timeout check
+    else if(Date.now() - roundStartMs > ROUND_TIMEOUT_MS){
+      finishRound({forfeited:true});
+    }
+  }
+  else if(state === 'jumping'){
+    angle += ANGLE_SPEED * angleDir;
+    if(angle >= 88){ angle = 88; angleDir = -1; }
+    if(angle <= 2){ angle = 2; angleDir = 1; }
+    // Timeout while choosing angle
+    if(Date.now() - roundStartMs > ROUND_TIMEOUT_MS){
+      finishRound({forfeited:true});
+    }
+  }
+  else if(state === 'airborne'){
+    airborneFrame++;
+    // Update dist for visual tracking
+    const t = airborneFrame / AIRBORNE_FRAMES;
+    dist = takeoffDist + jumpDistance * Math.min(1, t);
+    if(airborneFrame >= AIRBORNE_FRAMES){
+      finishRound({});
+    }
+  }
+  else if(state === 'roundEnd'){
+    if(Date.now() - roundEndAt > AUTO_ADVANCE_MS) startNextRound();
+  }
+
+  // Draw
+  if(state === 'title'){ drawTitle(); }
+  else if(state === 'countdown'){ drawCountdown(); }
+  else if(state === 'running' || state === 'airborne'){
+    drawScene();
+    drawHUD();
+  }
+  else if(state === 'jumping'){
+    drawScene();
+    drawHUD();
+    drawAngleGauge();
+  }
+  else if(state === 'roundEnd'){ drawRoundEnd(); }
+  else if(state === 'final'){ drawFinal(); }
+
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>

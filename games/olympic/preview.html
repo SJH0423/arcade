@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8">
+  <title>WORLD ATHLETICS - Sprite Preview</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+    body {
+      background: #0a0a0a;
+      color: #fff;
+      font-family: 'Press Start 2P', monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      margin: 0
+    }
+
+    h1 {
+      font-size: 18px;
+      color: #ffaa22;
+      margin: 10px 0 4px
+    }
+
+    p {
+      font-size: 8px;
+      color: #888;
+      margin: 0 0 16px
+    }
+
+    canvas {
+      background: #1a1a2e;
+      image-rendering: pixelated;
+      image-rendering: -moz-crisp-edges;
+      border: 2px solid #444;
+      display: block
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      margin: 14px 0
+    }
+
+    .controls button {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 9px;
+      padding: 8px 14px;
+      background: #1e293b;
+      color: #a5f3fc;
+      border: 1px solid #22d3ee;
+      cursor: pointer
+    }
+
+    .controls button:hover {
+      background: #22d3ee;
+      color: #000
+    }
+
+    .controls button.active {
+      background: #22d3ee;
+      color: #000
+    }
+
+    .label {
+      font-size: 8px;
+      color: #666;
+      margin-top: 18px
+    }
+
+    .framerow {
+      display: flex;
+      gap: 12px;
+      margin-top: 8px
+    }
+
+    .framerow canvas {
+      background: #0f172a;
+      border: 1px solid #334
+    }
+
+    .note {
+      font-size: 7px;
+      color: #444;
+      max-width: 600px;
+      text-align: center;
+      margin-top: 24px;
+      line-height: 1.7
+    }
+
+    a {
+      color: #22d3ee;
+      text-decoration: none
+    }
+  </style>
+</head>
+
+<body>
+  <h1>OLYMPIC SPRITE PREVIEW</h1>
+  <p>스프라이트 검수용 — 게임 로직 없음</p>
+
+  <canvas id="main" width="600" height="280"></canvas>
+
+  <div class="controls" id="modeControls">
+    <button data-mode="run" class="active">RUN</button>
+    <button data-mode="victory">VICTORY</button>
+    <button data-mode="defeat">DEFEAT</button>
+  </div>
+
+  <div class="controls" id="speedControls">
+    <button data-spd="0.04">SLOW</button>
+    <button data-spd="0.08" class="active">NORMAL</button>
+    <button data-spd="0.16">FAST</button>
+    <button data-spd="0.28">SPRINT</button>
+  </div>
+
+  <div class="label">FRAME BREAKDOWN</div>
+  <div class="framerow" id="framerow"></div>
+
+  <div class="note">
+    100m 단거리용 캐릭터 스프라이트.<br>
+    RUN: 달리기 6프레임 사이클 / VICTORY: 만세 폴짝폴짝 / DEFEAT: OTL 좌절<br>
+    검수 후 의견 주시면 본 게임(olympic_100m.html)에 동기화합니다.
+  </div>
+
+  <script>
+    // ===== Sprite definition =====
+    // 16x24 pixels, 6 frames running cycle
+    // Color codes:
+    //   . transparent
+    //   S skin (face/arms/legs)
+    //   H hair
+    //   B body shirt
+    //   P pants/shorts
+    //   F shoes
+    const COLORS = {
+      '.': null,
+      'S': '#fdba74',  // skin
+      'H': '#0f0f0f',  // hair (black, distinguishable from track)
+      'B': '#dc2626',  // red shirt (Korea-ish vibe)
+      'W': '#fef3c7',  // white shirt detail
+      'P': '#1e3a8a',  // blue shorts
+      'F': '#0f0f0f',  // black shoes
+      'O': '#f97316',  // shoe stripe
+    };
+
+    // Each frame: 16 wide x 24 tall
+    // Authored row by row. Read like a comic strip.
+    // Frame 0: contact (right foot forward, left arm forward)
+    // Frame 1: passing (left leg passing, right leg pushing back)
+    // Frame 2: contact (left foot forward, right arm forward)
+    // Frame 3: passing (right leg passing, left leg pushing back)
+    // Frame 4: contact-airborne mid (extreme of frame 0)
+    // Frame 5: contact-airborne mid (extreme of frame 2)
+
+    const FRAMES = [
+      // === Frame 0: right foot forward, left arm forward ===
+      [
+        '......HHHH......',
+        '.....HHHHHH.....',
+        '.....HSSSH......',
+        '.....SSSSS......',
+        '.....SSSSS......',
+        '....BBBBBBB.....',
+        '...BBBBBBBBS....',
+        '..SBWBBBBWBB....',
+        '...BBBBBBBB.....',
+        '...BBBBBBBB.....',
+        '...PPPPPPPP.....',
+        '...PPPPPPPP.....',
+        '...PP....PP.....',
+        '..SS......PP....',
+        '..S........PP...',
+        '.SS.........SS..',
+        '.SS.........SS..',
+        '..S..........S..',
+        '..S..........S..',
+        '..SS........SS..',
+        '..FF........FF..',
+        '.FOFF......FFOF.',
+        '.FFFF......FFFF.',
+        '................',
+      ],
+      // === Frame 1: passing (legs together mid-stride) ===
+      [
+        '......HHHH......',
+        '.....HHHHHH.....',
+        '.....HSSSH......',
+        '.....SSSSS......',
+        '.....SSSSS......',
+        '.....BBBBB......',
+        '....BBBBBBB.....',
+        '...BBBWWBBB.....',
+        '....BBBBBB......',
+        '....BBBBBB......',
+        '....PPPPPP......',
+        '....PPPPPP......',
+        '....PP..PP......',
+        '....PP..PP......',
+        '....SS..SS......',
+        '....SS..SS......',
+        '....SS..SS......',
+        '....SS..SS......',
+        '....SS..SS......',
+        '....FF..FF......',
+        '...FOFF.FFOF....',
+        '...FFFF.FFFF....',
+        '................',
+        '................',
+      ],
+      // === Frame 2: left foot forward, right arm forward ===
+      [
+        '......HHHH......',
+        '.....HHHHHH.....',
+        '.....HSSSH......',
+        '.....SSSSS......',
+        '.....SSSSS......',
+        '.....BBBBBBB....',
+        '....SBBBBBBBB...',
+        '....BBWBBBBWBS..',
+        '.....BBBBBBBB...',
+        '.....BBBBBBBB...',
+        '.....PPPPPPPP...',
+        '.....PPPPPPPP...',
+        '.....PP....PP...',
+        '....PP......SS..',
+        '...PP........S..',
+        '..SS.........SS.',
+        '..SS.........SS.',
+        '..S...........S.',
+        '..S...........S.',
+        '..SS.........SS.',
+        '..FF.........FF.',
+        '.FOFF.......FFOF',
+        '.FFFF.......FFFF',
+        '................',
+      ],
+      // === Frame 3: passing opposite ===
+      [
+        '......HHHH......',
+        '.....HHHHHH.....',
+        '.....HSSSH......',
+        '.....SSSSS......',
+        '.....SSSSS......',
+        '.....BBBBB......',
+        '....BBBBBBB.....',
+        '...BBBWWBBB.....',
+        '....BBBBBB......',
+        '....BBBBBB......',
+        '....PPPPPP......',
+        '....PPPPPP......',
+        '....PP..PP......',
+        '....PP..PP......',
+        '....SS..SS......',
+        '....SS..SS......',
+        '....SS..SS......',
+        '....SS..SS......',
+        '....SS..SS......',
+        '....FF..FF......',
+        '...FOFF.FFOF....',
+        '...FFFF.FFFF....',
+        '................',
+        '................',
+      ],
+      // === Frame 4: extreme stride (right foot far forward, airborne) ===
+      [
+        '......HHHH......',
+        '.....HHHHHH.....',
+        '.....HSSSH......',
+        '.....SSSSS......',
+        '.....SSSSS......',
+        '...BBBBBBBB.....',
+        '..BBBBBBBBSS....',
+        '.SBBWBBBBWBB....',
+        '..BBBBBBBB......',
+        '..BBBBBBBB......',
+        '..PPPPPPPP......',
+        '..PPPPPPPP......',
+        '..PP.....PP.....',
+        '.SS.......PPP...',
+        'SS.........PPS..',
+        'S...........SSS.',
+        'S............SS.',
+        '.S............S.',
+        '.SS...........S.',
+        '..S..........SS.',
+        '..FF........FF..',
+        '.FFOF.......FFOF',
+        '.FFFF.......FFFF',
+        '................',
+      ],
+      // === Frame 5: extreme stride other side ===
+      [
+        '......HHHH......',
+        '.....HHHHHH.....',
+        '.....HSSSH......',
+        '.....SSSSS......',
+        '.....SSSSS......',
+        '.....BBBBBBBB...',
+        '....SBBBBBBBBB..',
+        '....BBBWBBBBWBS.',
+        '......BBBBBBBB..',
+        '......BBBBBBBB..',
+        '......PPPPPPPP..',
+        '......PPPPPPPP..',
+        '.....PP.....PP..',
+        '...PPP.......SS.',
+        '..SPP.........SS',
+        '.SSS...........S',
+        '.SS............S',
+        '.S............S.',
+        'S............SS.',
+        'SS..........S...',
+        '.FF........FF...',
+        'FOFF.......FOFF.',
+        'FFFF.......FFFF.',
+        '................',
+      ],
+    ];
+
+    // Special pose frames (not part of running cycle)
+    const VICTORY_FRAME = [
+      '................',
+      '................',
+      '................',
+      '................',
+      '.S............S.',
+      'SS............SS',
+      '.SS..........SS.',
+      '.SS....HH....SS.',
+      '..SS..HHHH..SS..',
+      '..SS.HSSSH..SS..',
+      '..SS..SSS...SS..',
+      '...SS......SS...',
+      '....SBBBBBBS....',
+      '.....BBBBBB.....',
+      '....BBBBBBBB....',
+      '.....BBBBBB.....',
+      '.....BBBBBB.....',
+      '.....PPPPPP.....',
+      '.....PPPPPP.....',
+      '.....PP..PP.....',
+      '.....SS..SS.....',
+      '.....SS..SS.....',
+      '.....FF..FF.....',
+      '....FFF..FFF....',
+    ];
+    const DEFEAT_FRAME = [
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+      '.HHHH...........',
+      'HSSSH...........',
+      '.SSS............',
+      '.BBBBBBBBBB.....',
+      '.BBBBBBBBBBB....',
+      '..BBBBBBBBPP....',
+      '..BBBBBBBPPPP...',
+      '..S.S....PPPP...',
+      '..SS.S...PPPP...',
+      '..SS.S....PPP...',
+      '...S.S.....PP...',
+      '....S.S....PP...',
+      '....F.F....SS...',
+      '...........SS...',
+      '...........SS...',
+      '...........FF...',
+      '..........FFFF..',
+    ];
+
+    const SPRITE_W = 16, SPRITE_H = 24;
+
+    function renderSprite(ctx, frameOrIdx, ox, oy, scale) {
+      const frame = (typeof frameOrIdx === 'number') ? FRAMES[frameOrIdx] : frameOrIdx;
+      for (let y = 0; y < SPRITE_H; y++) {
+        const row = frame[y];
+        for (let x = 0; x < SPRITE_W; x++) {
+          const c = row[x];
+          const col = COLORS[c];
+          if (col) {
+            ctx.fillStyle = col;
+            ctx.fillRect(ox + x * scale, oy + y * scale, scale, scale);
+          }
+        }
+      }
+    }
+
+    // Animated tears for DEFEAT pose. Eyes are around col 2, row 8 in DEFEAT_FRAME.
+    function drawTears(ctx, ox, oy, scale) {
+      const eyeX = ox + 2 * scale + Math.floor(scale / 2);
+      const eyeY = oy + 9 * scale;
+      const t = Date.now() * 0.0028;
+      const FALL = 14 * scale;  // total fall distance
+      for (let i = 0; i < 3; i++) {
+        const phase = (t + i * 0.34) % 1;
+        const ty = eyeY + phase * FALL;
+        const alpha = phase < 0.85 ? 1 : (1 - (phase - 0.85) / 0.15);
+        ctx.fillStyle = 'rgba(125,211,252,' + alpha + ')';
+        // tear droplet (vertical 2x4 with rounded tip)
+        ctx.fillRect(eyeX - 1, ty, 3, 5);
+        ctx.fillRect(eyeX, ty - 1, 1, 1);
+      }
+    }
+
+    // ===== Main canvas =====
+    const main = document.getElementById('main');
+    const mctx = main.getContext('2d');
+    mctx.imageSmoothingEnabled = false;
+
+    let frameTimer = 0;
+    let curFrame = 0;
+    let speed = 0.08;
+    let runX = 0;
+    let mode = 'run';   // run / victory / defeat
+
+    // Track stripes
+    function drawTrack() {
+      mctx.fillStyle = '#1a1a2e';
+      mctx.fillRect(0, 0, 600, 280);
+      // ground
+      mctx.fillStyle = '#7c2d12';
+      mctx.fillRect(0, 220, 600, 60);
+      // lane markings
+      mctx.fillStyle = '#fef3c7';
+      for (let i = 0; i < 12; i++) {
+        const x = ((i * 60) - (runX * 0.5 % 60));
+        mctx.fillRect(x, 232, 30, 3);
+        mctx.fillRect(x, 252, 30, 3);
+      }
+      // horizon line
+      mctx.fillStyle = '#0f172a';
+      mctx.fillRect(0, 0, 600, 218);
+      mctx.fillStyle = '#1e293b';
+      mctx.fillRect(0, 218, 600, 2);
+      // distant crowd dots
+      for (let i = 0; i < 80; i++) {
+        const x = ((i * 15) - (runX * 0.1 % 15));
+        const y = 200 + (i % 3);
+        mctx.fillStyle = i % 4 === 0 ? '#475569' : '#334155';
+        mctx.fillRect(x, y, 4, 4);
+      }
+    }
+
+    function loop() {
+      drawTrack();
+
+      // Update animation only when running
+      if (mode === 'run') {
+        frameTimer += speed;
+        if (frameTimer >= 1) {
+          frameTimer = 0;
+          curFrame = (curFrame + 1) % FRAMES.length;
+        }
+        runX += speed * 60;
+      }
+
+      // Draw runner at center
+      const scale = 6;
+      const sx = 600 / 2 - SPRITE_W * scale / 2;
+      let sy = 220 - SPRITE_H * scale + 10;
+      let yOffset = 0;
+
+      // Victory bounce
+      if (mode === 'victory') {
+        yOffset = -Math.max(0, Math.sin(Date.now() * 0.012) * 16);
+      }
+
+      // Shadow
+      mctx.fillStyle = 'rgba(0,0,0,0.4)';
+      mctx.beginPath();
+      mctx.ellipse(sx + SPRITE_W * scale / 2, 222, 28, 5, 0, 0, Math.PI * 2);
+      mctx.fill();
+
+      if (mode === 'run') {
+        renderSprite(mctx, curFrame, sx, sy, scale);
+      } else if (mode === 'victory') {
+        renderSprite(mctx, VICTORY_FRAME, sx, sy + yOffset, scale);
+      } else if (mode === 'defeat') {
+        renderSprite(mctx, DEFEAT_FRAME, sx, sy, scale);
+        drawTears(mctx, sx, sy, scale);
+      }
+
+      // Label
+      mctx.fillStyle = '#666';
+      mctx.font = '8px "Press Start 2P"';
+      mctx.textAlign = 'left';
+      if (mode === 'run') {
+        mctx.fillText('RUN  FRAME ' + curFrame + '  SPEED ' + speed.toFixed(2), 10, 14);
+      } else {
+        mctx.fillText(mode.toUpperCase(), 10, 14);
+      }
+
+      requestAnimationFrame(loop);
+    }
+    loop();
+
+    // Speed buttons
+    document.querySelectorAll('#speedControls button').forEach(b => {
+      b.addEventListener('click', () => {
+        speed = parseFloat(b.dataset.spd);
+        document.querySelectorAll('#speedControls button').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+      });
+    });
+
+    // Mode buttons
+    function rebuildFrameRow() {
+      const row = document.getElementById('framerow');
+      row.innerHTML = '';
+      let frames;
+      if (mode === 'run') frames = FRAMES;
+      else if (mode === 'victory') frames = [VICTORY_FRAME];
+      else if (mode === 'defeat') frames = [DEFEAT_FRAME];
+      for (let i = 0; i < frames.length; i++) {
+        const c = document.createElement('canvas');
+        c.width = SPRITE_W * 4;
+        c.height = SPRITE_H * 4;
+        const cx = c.getContext('2d');
+        cx.imageSmoothingEnabled = false;
+        cx.fillStyle = '#0f172a';
+        cx.fillRect(0, 0, c.width, c.height);
+        renderSprite(cx, frames[i], 0, 0, 4);
+        row.appendChild(c);
+      }
+    }
+    document.querySelectorAll('#modeControls button').forEach(b => {
+      b.addEventListener('click', () => {
+        mode = b.dataset.mode;
+        document.querySelectorAll('#modeControls button').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        rebuildFrameRow();
+      });
+    });
+
+    rebuildFrameRow();
+  </script>
+</body>
+
+</html>

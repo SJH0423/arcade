@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Space Arcade</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;700;900&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      background: #0a0a0f;
+      color: #e2e8f0;
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+    }
+
+    .stars {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .stars canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    .header {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+      padding: 200px 20px 20px;
+    }
+
+    .header h1 {
+      font-family: 'Press Start 2P', monospace;
+      font-size: clamp(1.4rem, 4vw, 2.4rem);
+      background: linear-gradient(135deg, #60a5fa, #a78bfa, #f472b6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+    }
+
+    .header p {
+      font-size: 0.95rem;
+      color: #64748b;
+      letter-spacing: 0.02em;
+    }
+
+    .game-grid {
+      position: relative;
+      z-index: 10;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 32px;
+      padding: 60px 40px 80px;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    .game-card {
+      width: 100%;
+      background: linear-gradient(145deg, rgba(30, 30, 50, 0.8), rgba(15, 15, 30, 0.9));
+      border: 1px solid rgba(100, 100, 180, 0.15);
+      border-radius: 20px;
+      overflow: hidden;
+      transition: border-color 0.3s, box-shadow 0.3s;
+      position: relative;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .game-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 20px;
+      padding: 1px;
+      background: linear-gradient(135deg, transparent, rgba(100, 130, 255, 0.3), transparent);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      opacity: 0;
+      transition: opacity 0.4s;
+      pointer-events: none;
+    }
+
+    .game-card.thumb-hover {
+      border-color: rgba(100, 130, 255, 0.4);
+      box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.5),
+        0 0 40px rgba(100, 130, 255, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .game-card.thumb-hover::before {
+      opacity: 1;
+    }
+
+    .thumb {
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .thumb:hover {
+      transform: scale(1.04);
+    }
+
+    .thumb canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .thumb .play-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.3);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .thumb:hover .play-overlay {
+      opacity: 1;
+    }
+
+    .play-btn {
+      width: 64px;
+      height: 64px;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(8px);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      transition: all 0.3s;
+    }
+
+    .thumb:hover .play-btn {
+      background: rgba(255, 255, 255, 0.25);
+      transform: scale(1.1);
+    }
+
+    .play-btn svg {
+      width: 24px;
+      height: 24px;
+      fill: #fff;
+      margin-left: 3px;
+    }
+
+    .card-info {
+      padding: 24px 28px 28px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-info h2 {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 0.95rem;
+      margin-bottom: 10px;
+      letter-spacing: 0.02em;
+    }
+
+    .card-info p {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      line-height: 1.6;
+      flex: 1;
+    }
+
+    .card-tags {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    .tag {
+      font-size: 0.7rem;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: rgba(100, 130, 255, 0.1);
+      color: #818cf8;
+      border: 1px solid rgba(100, 130, 255, 0.2);
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .tag.green {
+      background: rgba(74, 222, 128, 0.1);
+      color: #4ade80;
+      border-color: rgba(74, 222, 128, 0.2);
+    }
+
+    .tag.pink {
+      background: rgba(244, 114, 182, 0.1);
+      color: #f472b6;
+      border-color: rgba(244, 114, 182, 0.2);
+    }
+
+    .tag.amber {
+      background: rgba(251, 191, 36, 0.1);
+      color: #fbbf24;
+      border-color: rgba(251, 191, 36, 0.2);
+    }
+
+    .card-tags {
+      align-items: center;
+    }
+
+    .vote-group {
+      display: inline-flex;
+      gap: 6px;
+      margin-left: auto;
+      padding-left: 8px;
+    }
+
+    .vote-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.7rem;
+      padding: 4px 8px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #94a3b8;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s;
+      font-family: inherit;
+      font-weight: 600;
+    }
+
+    .vote-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      transform: scale(1.05);
+    }
+
+    .vote-btn.up.voted {
+      background: rgba(74, 222, 128, 0.2);
+      color: #4ade80;
+      border-color: rgba(74, 222, 128, 0.4);
+    }
+
+    .vote-btn.down.voted {
+      background: rgba(244, 63, 94, 0.2);
+      color: #fb7185;
+      border-color: rgba(244, 63, 94, 0.4);
+    }
+
+    .vote-btn svg {
+      width: 12px;
+      height: 12px;
+      fill: currentColor;
+    }
+
+    .footer {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+      padding: 0 20px 40px;
+      font-size: 0.75rem;
+      color: #475569;
+    }
+
+    @media (max-width: 640px) {
+      .game-grid {
+        grid-template-columns: 1fr;
+        padding: 30px 16px 60px;
+        gap: 24px;
+      }
+
+      .header {
+        padding: 40px 16px 10px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="stars"><canvas id="starCanvas"></canvas></div>
+
+  <div class="header">
+    <h1>AI SPACE ARCADE</h1>
+    <p>Select a game to play</p>
+  </div>
+
+  <div class="game-grid">
+
+    <div class="game-card" data-href="games/starwing/">
+      <div class="thumb">
+        <canvas id="starwingThumb"></canvas>
+        <div class="play-overlay">
+          <div class="play-btn">
+            <svg viewBox="0 0 24 24">
+              <polygon points="5,3 19,12 5,21" />
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div class="card-info">
+        <h2>STARWING</h2>
+        <p>Neon arcade shooter. Destroy waves of alien invaders with precise shooting and quick reflexes.</p>
+        <div class="card-tags">
+          <span class="tag pink">2D</span>
+          <span class="tag">Shooter</span>
+          <span class="tag amber">Keyboard</span>
+          <span class="vote-group" data-game="starwing">
+            <span class="vote-btn up" role="button" data-vote="up"><svg viewBox="0 0 24 24">
+                <path
+                  d="M7 22h2V10H7v12zm14-11c0-1.1-.9-2-2-2h-5.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 2 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1z" />
+              </svg><span class="vc-up">0</span></span>
+            <span class="vote-btn down" role="button" data-vote="down"><svg viewBox="0 0 24 24">
+                <path
+                  d="M15 2H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v1c0 1.1.9 2 2 2h5.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 21l6.59-6.59c.36-.36.58-.86.58-1.41V4c0-1.1-.9-2-2-2zm4 0v12h4V2h-4z" />
+              </svg><span class="vc-down">0</span></span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="game-card" data-href="games/hyperlane/">
+      <div class="thumb">
+        <canvas id="hyperlaneThumb"></canvas>
+        <div class="play-overlay">
+          <div class="play-btn">
+            <svg viewBox="0 0 24 24">
+              <polygon points="5,3 19,12 5,21" />
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div class="card-info">
+        <h2>HYPERLANE</h2>
+        <p>3D rails shooter. Blast through hyperspace dodging alien waves with fast-twitch reflexes.</p>
+        <div class="card-tags">
+          <span class="tag green">3D</span>
+          <span class="tag">Shooter</span>
+          <span class="tag amber">Keyboard</span>
+          <span class="vote-group" data-game="hyperlane">
+            <span class="vote-btn up" role="button" data-vote="up"><svg viewBox="0 0 24 24">
+                <path
+                  d="M7 22h2V10H7v12zm14-11c0-1.1-.9-2-2-2h-5.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 2 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1z" />
+              </svg><span class="vc-up">0</span></span>
+            <span class="vote-btn down" role="button" data-vote="down"><svg viewBox="0 0 24 24">
+                <path
+                  d="M15 2H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v1c0 1.1.9 2 2 2h5.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 21l6.59-6.59c.36-.36.58-.86.58-1.41V4c0-1.1-.9-2-2-2zm4 0v12h4V2h-4z" />
+              </svg><span class="vc-down">0</span></span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="game-card" data-href="games/bloxfall/">
+      <div class="thumb">
+        <canvas id="bloxfallThumb"></canvas>
+        <div class="play-overlay">
+          <div class="play-btn">
+            <svg viewBox="0 0 24 24">
+              <polygon points="5,3 19,12 5,21" />
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div class="card-info">
+        <h2>BLOXFALL</h2>
+        <p>Falling-block stacking puzzle. Rotate, slide, and clear lines as the speed ramps up.</p>
+        <div class="card-tags">
+          <span class="tag pink">2D</span>
+          <span class="tag">Puzzle</span>
+          <span class="tag amber">Keyboard</span>
+          <span class="vote-group" data-game="bloxfall">
+            <span class="vote-btn up" role="button" data-vote="up"><svg viewBox="0 0 24 24">
+                <path
+                  d="M7 22h2V10H7v12zm14-11c0-1.1-.9-2-2-2h-5.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 2 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1z" />
+              </svg><span class="vc-up">0</span></span>
+            <span class="vote-btn down" role="button" data-vote="down"><svg viewBox="0 0 24 24">
+                <path
+                  d="M15 2H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v1c0 1.1.9 2 2 2h5.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 21l6.59-6.59c.36-.36.58-.86.58-1.41V4c0-1.1-.9-2-2-2zm4 0v12h4V2h-4z" />
+              </svg><span class="vc-down">0</span></span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="game-card" data-href="games/dungeon/">
+      <div class="thumb">
+        <canvas id="dungeonThumb"></canvas>
+        <div class="play-overlay">
+          <div class="play-btn">
+            <svg viewBox="0 0 24 24">
+              <polygon points="5,3 19,12 5,21" />
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div class="card-info">
+        <h2>DUNGEON</h2>
+        <p>First-person crypt crawler. Raycast the maze, gun down lurkers, survive the descent.</p>
+        <div class="card-tags">
+          <span class="tag green">3D</span>
+          <span class="tag">FPS</span>
+          <span class="tag amber">Keyboard</span>
+          <span class="vote-group" data-game="dungeon">
+            <span class="vote-btn up" role="button" data-vote="up"><svg viewBox="0 0 24 24">
+                <path
+                  d="M7 22h2V10H7v12zm14-11c0-1.1-.9-2-2-2h-5.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 2 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1z" />
+              </svg><span class="vc-up">0</span></span>
+            <span class="vote-btn down" role="button" data-vote="down"><svg viewBox="0 0 24 24">
+                <path
+                  d="M15 2H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v1c0 1.1.9 2 2 2h5.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 21l6.59-6.59c.36-.36.58-.86.58-1.41V4c0-1.1-.9-2-2-2zm4 0v12h4V2h-4z" />
+              </svg><span class="vc-down">0</span></span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="game-card" data-href="games/olympic/">
+      <div class="thumb">
+        <canvas id="olympicThumb"></canvas>
+        <div class="play-overlay">
+          <div class="play-btn">
+            <svg viewBox="0 0 24 24">
+              <polygon points="5,3 19,12 5,21" />
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div class="card-info">
+        <h2>WORLD ATHLETICS</h2>
+        <p>Track &amp; field decathlon. Mash the keys, beat the AI, set the gold medal record.</p>
+        <div class="card-tags">
+          <span class="tag pink">2D</span>
+          <span class="tag">Sports</span>
+          <span class="tag amber">Keyboard</span>
+          <span class="vote-group" data-game="olympic">
+            <span class="vote-btn up" role="button" data-vote="up"><svg viewBox="0 0 24 24">
+                <path
+                  d="M7 22h2V10H7v12zm14-11c0-1.1-.9-2-2-2h-5.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 2 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1z" />
+              </svg><span class="vc-up">0</span></span>
+            <span class="vote-btn down" role="button" data-vote="down"><svg viewBox="0 0 24 24">
+                <path
+                  d="M15 2H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v1c0 1.1.9 2 2 2h5.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 21l6.59-6.59c.36-.36.58-.86.58-1.41V4c0-1.1-.9-2-2-2zm4 0v12h4V2h-4z" />
+              </svg><span class="vc-down">0</span></span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">AI Space Arcade &mdash; Powered by Claude Code</div>
+
+  <script>
+    // Card navigation: only clicking the thumb (game screen) area opens the game
+    document.querySelectorAll('.game-card').forEach(card => {
+      const thumb = card.querySelector('.thumb');
+      if (!thumb) return;
+      thumb.addEventListener('click', () => {
+        const href = card.dataset.href;
+        if (href) location.href = href;
+      });
+    });
+
+    // Voting system (thumbs up/down per game, toggle logic with voter UUID)
+    (function () {
+      const API_BASE = location.origin;
+      const IS_LOCAL = location.protocol === 'file:';
+      const LS_VOTES = 'arcade_votes';
+      const LS_VOTER = 'arcade_voter_id';
+      const LS_LOCAL_COUNTS = 'arcade_rating_counts';
+
+      // Per-browser UUID (stable voter id)
+      let voterId = localStorage.getItem(LS_VOTER);
+      if (!voterId) {
+        voterId = (crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2)));
+        localStorage.setItem(LS_VOTER, voterId);
+      }
+
+      const votes = JSON.parse(localStorage.getItem(LS_VOTES) || '{}');
+
+      function applyVoted(group, game) {
+        const upBtn = group.querySelector('.vote-btn.up');
+        const downBtn = group.querySelector('.vote-btn.down');
+        upBtn.classList.toggle('voted', votes[game] === 'up');
+        downBtn.classList.toggle('voted', votes[game] === 'down');
+      }
+      function setCount(group, up, down) {
+        group.querySelector('.vc-up').textContent = up;
+        group.querySelector('.vc-down').textContent = down;
+      }
+      function saveVotes() { localStorage.setItem(LS_VOTES, JSON.stringify(votes)); }
+
+      function loadRatings() {
+        if (IS_LOCAL) {
+          const local = JSON.parse(localStorage.getItem(LS_LOCAL_COUNTS) || '{}');
+          document.querySelectorAll('.vote-group').forEach(g => {
+            const game = g.dataset.game;
+            const r = local[game] || { up: 0, down: 0 };
+            setCount(g, r.up, r.down);
+            applyVoted(g, game);
+          });
+          return;
+        }
+        fetch(API_BASE + '/api/rating').then(r => r.json()).then(data => {
+          document.querySelectorAll('.vote-group').forEach(g => {
+            const game = g.dataset.game;
+            const r = data[game] || { up: 0, down: 0 };
+            setCount(g, r.up, r.down);
+            applyVoted(g, game);
+          });
+        }).catch(() => { });
+      }
+
+      // Client-side toggle state computation (for optimistic UI / local mode)
+      function computeToggle(prev, click) {
+        // Returns { newState, upDelta, downDelta }
+        if (prev === click) return { newState: null, upDelta: click === 'up' ? -1 : 0, downDelta: click === 'down' ? -1 : 0 };
+        if (prev && prev !== click) {
+          const ud = { upDelta: 0, downDelta: 0 };
+          ud[prev === 'up' ? 'upDelta' : 'downDelta'] = -1;
+          ud[click === 'up' ? 'upDelta' : 'downDelta'] = 1;
+          return { newState: click, upDelta: ud.upDelta, downDelta: ud.downDelta };
+        }
+        return { newState: click, upDelta: click === 'up' ? 1 : 0, downDelta: click === 'down' ? 1 : 0 };
+      }
+
+      function doVote(game, click, group) {
+        const prev = votes[game] || null;
+        const t = computeToggle(prev, click);
+
+        // Optimistic local state update
+        if (t.newState === null) delete votes[game];
+        else votes[game] = t.newState;
+        saveVotes();
+        applyVoted(group, game);
+
+        if (IS_LOCAL) {
+          const local = JSON.parse(localStorage.getItem(LS_LOCAL_COUNTS) || '{}');
+          local[game] = local[game] || { up: 0, down: 0 };
+          local[game].up = Math.max(0, local[game].up + t.upDelta);
+          local[game].down = Math.max(0, local[game].down + t.downDelta);
+          localStorage.setItem(LS_LOCAL_COUNTS, JSON.stringify(local));
+          setCount(group, local[game].up, local[game].down);
+          return;
+        }
+        fetch(API_BASE + '/api/rating/' + game, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vote: click, voter_id: voterId })
+        }).then(r => r.json()).then(d => {
+          setCount(group, d.up, d.down);
+          if (d.state) votes[game] = d.state; else delete votes[game];
+          saveVotes();
+          applyVoted(group, game);
+        }).catch(() => { });
+      }
+
+      document.querySelectorAll('.vote-group').forEach(g => {
+        const game = g.dataset.game;
+        const stop = e => { e.preventDefault(); e.stopPropagation(); };
+        g.addEventListener('mousedown', stop);
+        g.addEventListener('pointerdown', stop);
+        g.addEventListener('click', stop);
+        g.querySelectorAll('.vote-btn').forEach(btn => {
+          btn.addEventListener('click', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            doVote(game, btn.dataset.vote, g);
+          });
+        });
+      });
+      loadRatings();
+    })();
+
+    // Star background
+    (function () {
+      const c = document.getElementById('starCanvas');
+      const ctx = c.getContext('2d');
+      let stars = [];
+
+      function resize() {
+        c.width = window.innerWidth;
+        c.height = window.innerHeight;
+        stars = Array.from({ length: 120 }, () => ({
+          x: Math.random() * c.width,
+          y: Math.random() * c.height,
+          r: Math.random() * 1.5 + 0.3,
+          a: Math.random(),
+          s: Math.random() * 0.005 + 0.002
+        }));
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, c.width, c.height);
+        for (const s of stars) {
+          s.a += s.s;
+          const alpha = 0.3 + Math.sin(s.a) * 0.4;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(180, 200, 255, ${alpha})`;
+          ctx.fill();
+        }
+        requestAnimationFrame(draw);
+      }
+
+      window.addEventListener('resize', resize);
+      resize();
+      draw();
+    })();
+
+    // Starwing thumbnail — matches actual game pixel sprites
+    (function () {
+      const c = document.getElementById('starwingThumb');
+      const ctx = c.getContext('2d');
+      c.width = 380; c.height = 237;
+      const W = 380, H = 237;
+
+      // Pixel sprites (mirrored from galaga.html)
+      const SHIP = [
+        '....W....', '....W....', '...WWW...', '...WWW...', '..WWWWW..',
+        '.WWRWRWW.', '.WWWWWWW.', 'WWWWWWWWW', 'W.WBWBW.W', 'W..BWB..W', '...B.B...'
+      ];
+      const SHIP_C = { W: '#ffffff', R: '#ff0000', B: '#4488ff' };
+
+      const BOSS = ['...WW...', '..BPPB..', '.BPPPPB.', '.PBWWBP.', 'BPWPPWPB', 'PPPPPPPP', 'P.BPPB.P', '..P..P..', '.P....P.'];
+      const BOSS_C = { W: '#ffffff', B: '#4488ff', P: '#8844cc' };
+
+      const BUTTER = ['..RR..', '.RBBR.', '.RBBR.', 'RBYYBR', 'RBYYBR', 'RB..BR', 'R.RR.R', '.R..R.'];
+      const BUTTER_C = { R: '#ff0000', B: '#4488ff', Y: '#ffff00' };
+
+      const BEE = ['.RYYYR.', '.YRRYY.', 'BYYYYBB', 'BBYRYBB', '.BYYB..', '.RBBR..', 'R.BB.R.', '.R..R..'];
+      const BEE_C = { R: '#ff0000', B: '#4488ff', Y: '#ffff00' };
+
+      function drawSprite(spr, cmap, cx, cy, px) {
+        const rows = spr.length, cols = spr[0].length;
+        const ox = cx - (cols * px) / 2, oy = cy - (rows * px) / 2;
+        for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++) {
+          const ch = spr[r][k];
+          if (ch !== '.') { ctx.fillStyle = cmap[ch] || '#fff'; ctx.fillRect(ox + k * px, oy + r * px, px, px); }
+        }
+      }
+
+      // Background + stars
+      ctx.fillStyle = '#050510';
+      ctx.fillRect(0, 0, W, H);
+      const starColors = ['#ff4444', '#4488ff', '#ffff44', '#44ff44', '#ffffff', '#ff88ff'];
+      for (let i = 0; i < 70; i++) {
+        const sx = Math.random() * W, sy = Math.random() * H, s = Math.random() * 1.2 + 0.4;
+        ctx.fillStyle = starColors[Math.floor(Math.random() * starColors.length)];
+        ctx.globalAlpha = 0.4 + Math.random() * 0.5;
+        ctx.fillRect(sx, sy, s, s);
+      }
+      ctx.globalAlpha = 1;
+
+      // Enemy formation — 4 rows × 8 cols, using actual sprites
+      const enemyRows = [BOSS, BUTTER, BEE, BUTTER];
+      const enemyCols = [BOSS_C, BUTTER_C, BEE_C, BUTTER_C];
+      const spx = 3;
+      const spacingX = 40, spacingY = 30;
+      const startX = W / 2 - (7 * spacingX) / 2;
+      const startY = 55;
+      for (let r = 0; r < 4; r++) for (let k = 0; k < 8; k++) {
+        drawSprite(enemyRows[r], enemyCols[r], startX + k * spacingX, startY + r * spacingY, spx);
+      }
+
+      // Player ship
+      const px0 = W / 2, py0 = H - 30;
+      drawSprite(SHIP, SHIP_C, px0, py0, spx);
+    })();
+
+    // DUNGEON thumbnail — mirrors actual raycaster game look
+    (function () {
+      const c = document.getElementById('dungeonThumb');
+      const ctx = c.getContext('2d');
+      c.width = 380; c.height = 237;
+      const W = 380, H = 237;
+      const CY = H * 0.5; // horizon
+      const FOV = Math.PI / 3;
+
+      // Floor/ceiling gradients
+      const ceilG = ctx.createLinearGradient(0, 0, 0, CY);
+      ceilG.addColorStop(0, '#050204'); ceilG.addColorStop(1, '#1c0a0f');
+      ctx.fillStyle = ceilG; ctx.fillRect(0, 0, W, CY);
+      const flrG = ctx.createLinearGradient(0, CY, 0, H);
+      flrG.addColorStop(0, '#2a1208'); flrG.addColorStop(1, '#0a0402');
+      ctx.fillStyle = flrG; ctx.fillRect(0, CY, W, H);
+
+      // Raycaster walls simulating a corridor with far wall
+      // Use DDA-like per-column distance model
+      const cols = W;
+      for (let x = 0; x < cols; x++) {
+        const cameraX = 2 * x / W - 1;
+        const rayAngle = Math.atan(cameraX * Math.tan(FOV / 2));
+        // Corridor geometry: side walls at distance |1/sin(angle)|, far wall at ~6
+        const absT = Math.abs(rayAngle);
+        let dist, side;
+        const sideDist = absT > 0.02 ? (0.85 / Math.sin(absT)) : 999;
+        const frontDist = 5.2;
+        if (sideDist < frontDist) { dist = sideDist; side = 1; }
+        else { dist = frontDist; side = 0; }
+        const corrected = dist * Math.cos(rayAngle);
+        const lineH = Math.min(H * 2, H / corrected);
+        const y0 = (H - lineH) / 2;
+
+        // Procedural brick texture sample: horizontal mortar lines + staggered vertical
+        // Position on wall (~U): based on column x for a steady pattern
+        const u = side === 0 ? (cameraX * 2.5) : (x / W * 4);
+        const uu = (u - Math.floor(u));
+        const texU = Math.floor(uu * 64);
+        // Draw base color for this strip
+        const baseR = side === 0 ? 122 : 90;
+        const baseG = side === 0 ? 56 : 40;
+        const baseB = side === 0 ? 16 : 8;
+        const shade = Math.max(0.2, 1 - corrected * 0.14);
+        ctx.fillStyle = `rgb(${(baseR * shade) | 0},${(baseG * shade) | 0},${(baseB * shade) | 0})`;
+        ctx.fillRect(x, y0, 1, lineH);
+
+        // Brick mortar lines across the wall height
+        const brickH = Math.max(3, lineH / 8);
+        ctx.fillStyle = `rgba(0,0,0,${0.55 * shade + 0.15})`;
+        for (let by = y0; by < y0 + lineH; by += brickH) {
+          ctx.fillRect(x, by, 1, 1);
+        }
+        // Vertical brick joints (staggered)
+        const rowIdx = Math.floor((texU + (side === 0 ? 0 : 3)) / 8);
+        if ((texU + (rowIdx % 2) * 4) % 8 < 1) {
+          ctx.fillStyle = `rgba(0,0,0,${0.4 * shade + 0.1})`;
+          ctx.fillRect(x, y0, 1, lineH);
+        }
+      }
+
+      // Enemy pixel sprite (matches game's drawEnemies style)
+      function drawMob(cx, cy, size) {
+        const w = size * 0.7, h = size;
+        const x0 = cx - w / 2, y0 = cy - h / 2;
+        for (let sy = 0; sy < h; sy++) {
+          for (let sx = 0; sx < w; sx++) {
+            const u = sx / w, v = sy / h;
+            let col = null;
+            if (v < 0.15) continue;
+            else if (v < 0.35) {
+              if (u > 0.25 && u < 0.75) col = '#662233';
+              if (v > 0.22 && v < 0.30 && (u > 0.30 && u < 0.40 || u > 0.60 && u < 0.70)) col = '#ff2222';
+            } else if (v < 0.80) {
+              if (u > 0.18 && u < 0.82) col = '#441122';
+              if (v > 0.45 && v < 0.55 && u > 0.35 && u < 0.65) col = '#884400';
+            } else {
+              if (u > 0.25 && u < 0.45) col = '#22000a';
+              if (u > 0.55 && u < 0.75) col = '#22000a';
+            }
+            if (col) { ctx.fillStyle = col; ctx.fillRect(Math.floor(x0 + sx), Math.floor(y0 + sy), 1, 1); }
+          }
+        }
+      }
+      drawMob(W / 2 - 55, CY + 12, 62);
+      drawMob(W / 2 + 52, CY + 18, 54);
+      drawMob(W / 2, CY - 4, 30);
+
+      // Crosshair at center
+      const cx2 = W / 2, cy2 = H / 2;
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fillRect(cx2 - 5, cy2, 4, 1);
+      ctx.fillRect(cx2 + 2, cy2, 4, 1);
+      ctx.fillRect(cx2, cy2 - 5, 1, 4);
+      ctx.fillRect(cx2, cy2 + 2, 1, 4);
+      ctx.fillStyle = 'rgba(255,80,80,0.9)';
+      ctx.fillRect(cx2, cy2, 1, 1);
+
+      // Gun at bottom center with muzzle flash
+      const gx = W / 2, gy = H - 18;
+      ctx.fillStyle = '#444';
+      ctx.fillRect(gx - 26, gy, 52, 24);
+      ctx.fillStyle = '#666';
+      ctx.fillRect(gx - 18, gy - 8, 36, 8);
+      ctx.fillStyle = '#222';
+      ctx.fillRect(gx - 3, gy - 28, 6, 20);
+      ctx.fillStyle = '#ffcc00';
+      ctx.fillRect(gx - 5, gy - 34, 10, 6);
+      ctx.fillStyle = '#ff6600';
+      ctx.fillRect(gx - 9, gy - 32, 18, 3);
+      ctx.fillStyle = '#ffff88';
+      ctx.fillRect(gx - 2, gy - 36, 4, 3);
+
+      // Left HUD: TIME + hearts
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#ff4444'; ctx.font = '9px "Press Start 2P", monospace';
+      ctx.fillText('TIME', 8, 14);
+      ctx.fillStyle = '#ffffff'; ctx.font = '11px "Press Start 2P", monospace';
+      ctx.fillText('12.4s', 8, 28);
+      ctx.fillStyle = '#ff4444'; ctx.font = '12px "Press Start 2P", monospace';
+      for (let i = 0; i < 5; i++) ctx.fillText('\u2665', 8 + i * 12, 46);
+
+      // Center AMMO
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffaa22'; ctx.font = '9px "Press Start 2P", monospace'; ctx.fillText('AMMO', W / 2, 14);
+      ctx.fillStyle = '#ffff88'; ctx.font = '14px "Press Start 2P", monospace'; ctx.fillText('24', W / 2, 30);
+
+      // Minimap (wireframe, matches current game)
+      const mw = 72, mh = 72;
+      const mx = W - mw - 8, my = 8;
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(mx - 2, my - 2, mw + 4, mh + 4);
+      ctx.strokeStyle = '#666'; ctx.lineWidth = 1;
+      ctx.strokeRect(mx - 2, my - 2, mw + 4, mh + 4);
+      // Wireframe walls (just an example layout)
+      ctx.strokeStyle = '#aa7744'; ctx.lineWidth = 1;
+      ctx.strokeRect(mx, my, mw, mh);
+      // Inner room lines
+      ctx.beginPath();
+      ctx.moveTo(mx + 20, my); ctx.lineTo(mx + 20, my + 30);
+      ctx.moveTo(mx + 20, my + 30); ctx.lineTo(mx + 45, my + 30);
+      ctx.moveTo(mx + 45, my + 10); ctx.lineTo(mx + 45, my + 30);
+      ctx.moveTo(mx + 10, my + 45); ctx.lineTo(mx + 35, my + 45);
+      ctx.moveTo(mx + 50, my + 50); ctx.lineTo(mx + mw, my + 50);
+      ctx.stroke();
+      // Player dot + FOV cone + direction line
+      const px = mx + 30, py = my + 50;
+      ctx.fillStyle = 'rgba(255,255,100,0.2)';
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(px + Math.cos(-Math.PI / 2 - FOV / 2) * 20, py + Math.sin(-Math.PI / 2 - FOV / 2) * 20);
+      ctx.lineTo(px + Math.cos(-Math.PI / 2 + FOV / 2) * 20, py + Math.sin(-Math.PI / 2 + FOV / 2) * 20);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffff00'; ctx.fillRect(px - 1, py - 1, 3, 3);
+      ctx.strokeStyle = '#ffff00';
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py - 8); ctx.stroke();
+    })();
+
+    // HYPERLANE thumbnail
+    (function () {
+      const c = document.getElementById('hyperlaneThumb');
+      const ctx = c.getContext('2d');
+      c.width = 380; c.height = 237;
+      const W = 380, H = 237;
+      const CX = W / 2, CY = H * 0.42;
+
+      // Background
+      ctx.fillStyle = '#000018';
+      ctx.fillRect(0, 0, W, H);
+
+      // Warp stars streaming from vanishing point
+      for (let i = 0; i < 80; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const d = Math.random() * 180 + 10;
+        const sx = CX + Math.cos(a) * d;
+        const sy = CY + Math.sin(a) * d * 0.7;
+        if (sx < 0 || sx >= W || sy < 0 || sy >= H) continue;
+        const brightness = Math.floor((d / 190) * 255);
+        ctx.fillStyle = `rgb(${brightness},${brightness},${Math.min(255, brightness + 40)})`;
+        const size = Math.max(1, (d / 190) * 2.5);
+        ctx.fillRect(sx, sy, size, size);
+      }
+
+      // Perspective road grid
+      ctx.strokeStyle = '#223366'; ctx.lineWidth = 1;
+      for (let i = 1; i < 7; i++) {
+        const t = i / 7;
+        const y = CY + (H - CY) * t * t;
+        if (y < CY || y > H) continue;
+        ctx.globalAlpha = 1 - t * 0.7;
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      // Vertical converging lines
+      ctx.strokeStyle = '#1a2a55'; ctx.lineWidth = 1;
+      for (let i = -5; i <= 5; i++) {
+        ctx.beginPath();
+        ctx.moveTo(CX + i * 8, CY);
+        ctx.lineTo(CX + i * W / 5, H);
+        ctx.stroke();
+      }
+
+      // Draw enemies at various depths
+      const enemies = [
+        { tx: CX - 80, ty: H * 0.78, scale: 0.95, type: 0 }, // close diamond
+        { tx: CX + 90, ty: H * 0.76, scale: 0.8, type: 1 },  // close ring
+        { tx: CX - 40, ty: H * 0.62, scale: 0.55, type: 2 }, // mid hex
+        { tx: CX + 30, ty: H * 0.55, scale: 0.4, type: 0 },  // mid diamond
+        { tx: CX - 20, ty: H * 0.50, scale: 0.25, type: 1 }, // far ring
+      ];
+      // Approach trails
+      for (const e of enemies) {
+        const p = e.scale;
+        const ex = CX + (e.tx - CX) * p;
+        const ey = CY + (e.ty - CY) * p;
+        ctx.strokeStyle = 'rgba(120,160,255,0.2)'; ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath(); ctx.moveTo(CX, CY); ctx.lineTo(e.tx, e.ty); ctx.stroke();
+        ctx.setLineDash([]);
+        e.sx = ex; e.sy = ey;
+      }
+      // Enemies (far first)
+      enemies.sort((a, b) => a.scale - b.scale);
+      for (const e of enemies) {
+        const size = Math.max(4, e.scale * 20);
+        const colors = [['#ff6644', '#ff9966'], ['#66cc44', '#aaff66'], ['#9944cc', '#cc88ff']];
+        const [c1, c2] = colors[e.type];
+        if (e.type === 0) {
+          ctx.fillStyle = c1;
+          ctx.beginPath();
+          ctx.moveTo(e.sx, e.sy - size); ctx.lineTo(e.sx + size, e.sy);
+          ctx.lineTo(e.sx, e.sy + size); ctx.lineTo(e.sx - size, e.sy);
+          ctx.closePath(); ctx.fill();
+          ctx.fillStyle = c2;
+          ctx.beginPath();
+          ctx.moveTo(e.sx, e.sy - size * 0.5); ctx.lineTo(e.sx + size * 0.5, e.sy);
+          ctx.lineTo(e.sx, e.sy + size * 0.5); ctx.lineTo(e.sx - size * 0.5, e.sy);
+          ctx.closePath(); ctx.fill();
+        } else if (e.type === 1) {
+          ctx.strokeStyle = c1; ctx.lineWidth = Math.max(1, size * 0.3);
+          ctx.beginPath(); ctx.arc(e.sx, e.sy, size, 0, Math.PI * 2); ctx.stroke();
+          ctx.fillStyle = c2;
+          ctx.beginPath(); ctx.arc(e.sx, e.sy, size * 0.4, 0, Math.PI * 2); ctx.fill();
+        } else {
+          ctx.fillStyle = c1;
+          ctx.fillRect(e.sx - size, e.sy - size * 0.8, size * 2, size * 1.6);
+          ctx.fillStyle = c2;
+          ctx.fillRect(e.sx - size * 0.5, e.sy - size * 0.4, size, size * 0.8);
+        }
+      }
+
+      // Player ship at bottom
+      function drawShip(sx, sy) {
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(sx, sy - 14);
+        ctx.lineTo(sx + 6, sy - 2);
+        ctx.lineTo(sx + 20, sy + 8);
+        ctx.lineTo(sx + 9, sy + 8);
+        ctx.lineTo(sx + 4, sy + 14);
+        ctx.lineTo(sx - 4, sy + 14);
+        ctx.lineTo(sx - 9, sy + 8);
+        ctx.lineTo(sx - 20, sy + 8);
+        ctx.lineTo(sx - 6, sy - 2);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#0088ff';
+        ctx.beginPath();
+        ctx.moveTo(sx, sy - 8); ctx.lineTo(sx + 4, sy + 2); ctx.lineTo(sx - 4, sy + 2);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ff6600';
+        ctx.fillRect(sx - 5, sy + 14, 3, 5);
+        ctx.fillRect(sx + 2, sy + 14, 3, 5);
+      }
+      drawShip(CX, H - 30);
+
+      // Player bullet trail
+      ctx.fillStyle = '#ffff66';
+      ctx.fillRect(CX - 1, H - 60, 2, 12);
+      ctx.fillRect(CX - 1, H - 90, 2, 10);
+    })();
+
+    // BLOXFALL thumbnail
+    (function () {
+      const c = document.getElementById('bloxfallThumb');
+      const ctx = c.getContext('2d');
+      c.width = 380; c.height = 237;
+      const W = 380, H = 237;
+
+      ctx.fillStyle = '#0a0a12';
+      ctx.fillRect(0, 0, W, H);
+
+      // Faint board grid suggestion
+      const CELL = 14, COLS = 8, ROWS = 13;
+      const BW = COLS * CELL, BH = ROWS * CELL;
+      // Center the whole visual group. Actual panel text width ~36px.
+      const PANEL_W = 36;
+      const GROUP_W = BW + 14 + PANEL_W;
+      const BX = Math.round((W - GROUP_W) / 2);
+      const BY = (H - BH) / 2 + 8;
+
+      // Board bg
+      ctx.fillStyle = '#0d0d18';
+      ctx.fillRect(BX, BY, BW, BH);
+
+      // Grid lines
+      ctx.strokeStyle = '#1a1a2a'; ctx.lineWidth = 1;
+      for (let c2 = 1; c2 < COLS; c2++) { ctx.beginPath(); ctx.moveTo(BX + c2 * CELL + 0.5, BY); ctx.lineTo(BX + c2 * CELL + 0.5, BY + BH); ctx.stroke(); }
+      for (let r2 = 1; r2 < ROWS; r2++) { ctx.beginPath(); ctx.moveTo(BX, BY + r2 * CELL + 0.5); ctx.lineTo(BX + BW, BY + r2 * CELL + 0.5); ctx.stroke(); }
+
+      // Border
+      ctx.strokeStyle = '#444'; ctx.lineWidth = 2;
+      ctx.strokeRect(BX - 1, BY - 1, BW + 2, BH + 2);
+
+      // Draw stacked cells
+      function cell(col, row, color) {
+        const x = BX + col * CELL, y = BY + row * CELL;
+        ctx.fillStyle = color;
+        ctx.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillRect(x + 1, y + 1, CELL - 2, 2); ctx.fillRect(x + 1, y + 1, 2, CELL - 3);
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(x + 1, y + CELL - 3, CELL - 2, 2); ctx.fillRect(x + CELL - 3, y + 1, 2, CELL - 2);
+      }
+
+      // Sample stacked state using bloxfall palette
+      const CY = '#7fd4d4', YL = '#e8c479', PR = '#b784d1', GR = '#8ed18c', RD = '#e08585', OR = '#dba262', BL = '#6a95d4';
+      const stack = [
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, CY, CY],  // falling I-piece on right
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, PR, 0, 0, 0, 0, 0],
+        [0, 0, PR, PR, 0, 0, GR, GR],
+        [YL, YL, PR, OR, 0, GR, GR, 0],
+        [YL, YL, RD, OR, OR, BL, BL, BL],
+        [RD, RD, RD, OR, 0, BL, 0, 0],
+      ];
+      for (let r = 0; r < ROWS; r++) for (let c2 = 0; c2 < COLS; c2++) {
+        if (stack[r][c2]) cell(c2, r, stack[r][c2]);
+      }
+
+      // Falling T-piece near top
+      const tShape = [[0, 1, 0], [1, 1, 1]];
+      const tX = 3, tY = 1;
+      for (let r = 0; r < 2; r++) for (let c2 = 0; c2 < 3; c2++) {
+        if (tShape[r][c2]) cell(tX + c2, tY + r, PR);
+      }
+
+      // Side panel labels
+      const PX = BX + BW + 14;
+      ctx.textAlign = 'left';
+      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.fillStyle = '#8aa'; ctx.fillText('SCORE', PX, BY + 12);
+      ctx.fillStyle = '#fff'; ctx.font = '12px "Press Start 2P", monospace';
+      ctx.fillText('4820', PX, BY + 30);
+      ctx.fillStyle = '#8aa'; ctx.font = '10px "Press Start 2P", monospace';
+      ctx.fillText('LEVEL', PX, BY + 55);
+      ctx.fillStyle = '#fff'; ctx.font = '12px "Press Start 2P", monospace';
+      ctx.fillText('3', PX, BY + 73);
+      ctx.fillStyle = '#8aa'; ctx.font = '10px "Press Start 2P", monospace';
+      ctx.fillText('NEXT', PX, BY + 100);
+      // Draw mini O-piece
+      for (let r = 0; r < 2; r++) for (let c2 = 0; c2 < 2; c2++) {
+        ctx.fillStyle = YL;
+        ctx.fillRect(PX + c2 * 11 + 1, BY + 106 + r * 11 + 1, 9, 9);
+      }
+    })();
+
+    // OLYMPIC thumbnail — two runners on a stadium track sprinting toward finish
+    (function () {
+      const c = document.getElementById('olympicThumb');
+      if (!c) return;
+      const ctx = c.getContext('2d');
+      c.width = 380; c.height = 237;
+      const W = 380, H = 237;
+
+      // ===== Pixel runner sprite (36x32, lady runner from olympic_preview_2 frame 1) =====
+      const SPRITE_W = 36, SPRITE_H = 32;
+      const SPRITE = [
+        '.................ooo................',
+        '................oHHHo...............',
+        '...............oHHHHHo..............',
+        '...............oSSSSo...............',
+        '...............oSSSSo...............',
+        '...............oSSSo................',
+        '..............oSSSo.................',
+        '.............oSSoSSo................',
+        '............oWoWWWWWo...............',
+        '............So.oWWWWWo....So........',
+        '............So.oWWWWWoooSSSSSo......',
+        '............So..oWWWWooooo..........',
+        '............So..oWWWo...............',
+        '.............So.oWWWo...............',
+        '............oSo.oWWWo...............',
+        '............oo..oWWWo...............',
+        '................GGGGG...............',
+        '................GGGGGG..............',
+        '...............oGGGGGGGoo...........',
+        '..............oGGGGGGGGGGoo.........',
+        '..............oGGGoooooGGGGo........',
+        '..............oGGo.....oooGGo.......',
+        '....o........oSSo.........oSo.......',
+        '..ooSo...ooooSSo..........oSSo......',
+        '.oSSSSoooSSSSSSo...........oSo......',
+        'oSSoooooooooSSo............oSo......',
+        'ooo.........oo..............oSo.....',
+        '............................oSo.....',
+        '.............................oSo....',
+        '..............................ogoooo',
+        '..............................oggoo.',
+        '..............................ooo...',
+      ];
+      const COL_RED = { '.': null, 'o': '#1a1a1a', 'H': '#7c2d12', 'S': '#fdba74', 'W': '#dc2626', 'G': '#1e3a8a', 'g': '#0a1735' };
+      const COL_BLU = { '.': null, 'o': '#1a1a1a', 'H': '#1f2937', 'S': '#fdba74', 'W': '#2563eb', 'G': '#0b1e4f', 'g': '#0a1735' };
+
+      function drawRunner(ox, oy, scale, palette) {
+        for (let y = 0; y < SPRITE_H; y++) {
+          const row = SPRITE[y];
+          for (let x = 0; x < SPRITE_W; x++) {
+            const col = palette[row[x]];
+            if (col) { ctx.fillStyle = col; ctx.fillRect(ox + x * scale, oy + y * scale, scale, scale); }
+          }
+        }
+      }
+
+      // ===== Background: sky =====
+      const skyG = ctx.createLinearGradient(0, 0, 0, 130);
+      skyG.addColorStop(0, '#0f172a');
+      skyG.addColorStop(1, '#1e293b');
+      ctx.fillStyle = skyG;
+      ctx.fillRect(0, 0, W, 130);
+
+      // Distant stadium tier
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(0, 100, W, 30);
+
+      // Crowd dots (multicolored speckles)
+      const crowdCols = ['#475569', '#64748b', '#334155', '#7c2d12', '#dc2626', '#1e40af', '#a16207'];
+      for (let i = 0; i < 140; i++) {
+        const x = (i * 7) % W + (i % 3);
+        const y = 105 + ((i * 5) % 22);
+        ctx.fillStyle = crowdCols[i % crowdCols.length];
+        ctx.fillRect(x, y, 2, 2);
+      }
+
+      // Stadium edge
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 128, W, 3);
+
+      // ===== Track: brown clay =====
+      ctx.fillStyle = '#7c2d12';
+      ctx.fillRect(0, 131, W, 106);
+
+      // Lane separators (dashed white)
+      ctx.fillStyle = '#fef3c7';
+      for (let i = 0; i < 14; i++) {
+        const x = i * 30;
+        ctx.fillRect(x, 142, 18, 2);   // top
+        ctx.fillRect(x, 178, 18, 2);   // mid
+        ctx.fillRect(x, 218, 18, 2);   // bot
+      }
+
+      // ===== Finish line on the right =====
+      const FINISH_X = W - 50;
+      // checkered pole
+      for (let y = 132; y < 232; y += 6) {
+        ctx.fillStyle = (Math.floor(y / 6) % 2 === 0) ? '#fff' : '#000';
+        ctx.fillRect(FINISH_X - 8, y, 6, 6);
+        ctx.fillStyle = (Math.floor(y / 6) % 2 === 0) ? '#000' : '#fff';
+        ctx.fillRect(FINISH_X - 2, y, 6, 6);
+        ctx.fillStyle = (Math.floor(y / 6) % 2 === 0) ? '#fff' : '#000';
+        ctx.fillRect(FINISH_X + 4, y, 6, 6);
+      }
+      // FINISH banner
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillRect(FINISH_X - 32, 110, 70, 18);
+      ctx.fillStyle = '#000';
+      ctx.font = 'bold 11px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('FINISH', FINISH_X + 3, 124);
+
+      // ===== Two runners (player ahead, AI behind) =====
+      const scale = 2;
+      const SPRITE_PX_W = SPRITE_W * scale;  // 72
+      const SPRITE_PX_H = SPRITE_H * scale;  // 64
+
+      // Player (red) — front lane center (between sep 178 and 218)
+      const PLAYER_BASELINE = 200;
+      const px = 155, py = PLAYER_BASELINE - SPRITE_PX_H + 6;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.beginPath();
+      ctx.ellipse(px + SPRITE_PX_W / 2, PLAYER_BASELINE, 22, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      drawRunner(px, py, scale, COL_RED);
+
+      // AI (blue) — back lane center (between sep 142 and 178)
+      const AI_BASELINE = 162;
+      const ax = 90, ay = AI_BASELINE - SPRITE_PX_H + 6;
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.beginPath();
+      ctx.ellipse(ax + SPRITE_PX_W / 2, AI_BASELINE, 20, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      drawRunner(ax, ay, scale, COL_BLU);
+
+      // Motion lines behind player (suggests speed)
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      for (let i = 0; i < 3; i++) {
+        ctx.fillRect(px - 18 - i * 8, py + 30 + i * 6, 12, 2);
+      }
+
+      // ===== Gold medal in top-left corner (pixel art) =====
+      const MEDAL = [
+        '................',
+        '....RR.RR.......',
+        '....RR.RR.......',
+        '....RR.RR.......',
+        '.....RRR........',
+        '....BBBBB.......',
+        '...BYYYYYB......',
+        '..BYYYYYYYB.....',
+        '..BYY11YYYB.....',
+        '..BYYY1YYYB.....',
+        '..BYYY1YYYB.....',
+        '..BYY111YYB.....',
+        '..BYYYYYYYB.....',
+        '...BYYYYYB......',
+        '....BBBBB.......',
+        '................',
+      ];
+      const MEDAL_C = {
+        '.': null,
+        'R': '#dc2626',  // red ribbon
+        'B': '#a16207',  // dark gold border
+        'Y': '#fbbf24',  // bright gold fill
+        '1': '#7c2d12',  // dark brown digit
+      };
+      const MX_OFF = 6, MY_OFF = 6, MPX = 3;  // origin + pixel scale
+      for (let r = 0; r < MEDAL.length; r++) {
+        const row = MEDAL[r];
+        for (let k = 0; k < row.length; k++) {
+          const ch = row[k];
+          const col = MEDAL_C[ch];
+          if (col) {
+            ctx.fillStyle = col;
+            ctx.fillRect(MX_OFF + k * MPX, MY_OFF + r * MPX, MPX, MPX);
+          }
+        }
+      }
+    })();
+  </script>
+</body>
+
+</html>

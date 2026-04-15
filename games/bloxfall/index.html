@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>BLOXFALL</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;touch-action:none;font-family:'Press Start 2P',monospace;display:flex;justify-content:center;align-items:center;height:100vh}
+canvas{display:block;width:600px;height:720px;image-rendering:pixelated;image-rendering:crisp-edges}
+#touchUI{display:none;position:fixed;bottom:20px;left:0;right:0;z-index:100;padding:0 16px}
+.touch-row{display:flex;justify-content:space-between;align-items:center}
+.tbtn{width:64px;height:64px;border-radius:50%;border:2px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.08);color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;user-select:none}
+.tbtn:active{background:rgba(255,255,255,0.25)}
+#backBtn{position:fixed;top:12px;left:12px;z-index:200;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#94a3b8;font-size:10px;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:'Press Start 2P',monospace;text-decoration:none}
+#backBtn:hover{background:rgba(255,255,255,0.15);color:#fff}
+@media(pointer:coarse){#touchUI{display:block}}
+</style>
+</head>
+<body>
+<a id="backBtn" href="../../index.html">MENU</a>
+<canvas id="game"></canvas>
+<div id="touchUI">
+<div class="touch-row">
+<div id="tLeft" class="tbtn">&#9664;</div>
+<div id="tRot" class="tbtn">&#8635;</div>
+<div id="tDown" class="tbtn">&#9660;</div>
+<div id="tRight" class="tbtn">&#9654;</div>
+</div>
+</div>
+<script>
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+
+const COLS=10,ROWS=24,CELL=14;
+const BW=COLS*CELL,BH=ROWS*CELL;
+const W=300,H=360;
+canvas.width=W;canvas.height=H;
+
+const BX=14,BY=12;
+
+// Piece shapes (mathematical tetrominoes) with unique pastel palette
+const PIECES=[
+  {shape:[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], color:'#7fd4d4'},
+  {shape:[[1,1],[1,1]], color:'#e8c479'},
+  {shape:[[0,1,0],[1,1,1],[0,0,0]], color:'#b784d1'},
+  {shape:[[0,1,1],[1,1,0],[0,0,0]], color:'#8ed18c'},
+  {shape:[[1,1,0],[0,1,1],[0,0,0]], color:'#e08585'},
+  {shape:[[0,0,1],[1,1,1],[0,0,0]], color:'#dba262'},
+  {shape:[[1,0,0],[1,1,1],[0,0,0]], color:'#6a95d4'},
+];
+
+let board,current,next;
+let state='title';
+let score=0,lines=0,level=1;
+let hi=0;
+let rankingData=[],rankingLoaded=false;
+let nameChars=['A','A','A'],namePos=0,nameBlinkT=0;
+let gravityT=0,gravityI=48;
+const LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ';
+let attractStartT=Date.now(),attract=true;
+let flashT=0;
+
+// Audio
+const AC=new(window.AudioContext||window.webkitAudioContext)();
+function snd(f,d,t,v){const o=AC.createOscillator(),g=AC.createGain();o.type=t||'square';o.frequency.value=f;g.gain.setValueAtTime(v||0.08,AC.currentTime);g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+d);o.connect(g);g.connect(AC.destination);o.start();o.stop(AC.currentTime+d);}
+function sfxMove(){snd(440,0.03,'square',0.03)}
+function sfxRotate(){snd(660,0.05,'square',0.04)}
+function sfxDrop(){snd(220,0.1,'sawtooth',0.06)}
+function sfxClear(n){snd(600+n*80,0.1,'square',0.06);setTimeout(()=>snd(800+n*100,0.12,'square',0.06),80);if(n>=3)setTimeout(()=>snd(1200,0.15,'square',0.07),160);}
+function sfxOver(){snd(300,0.3,'sawtooth',0.08);setTimeout(()=>snd(200,0.35,'sawtooth',0.08),100);setTimeout(()=>snd(100,0.4,'sawtooth',0.08),220);}
+
+function newBoard(){board=[];for(let r=0;r<ROWS;r++)board.push(new Array(COLS).fill(0));}
+
+function randomPiece(){
+  const p=PIECES[Math.floor(Math.random()*PIECES.length)];
+  return {shape:p.shape.map(r=>r.slice()), color:p.color, x:Math.floor((COLS-p.shape[0].length)/2), y:0};
+}
+
+function spawn(){
+  current=next||randomPiece();
+  next=randomPiece();
+  if(collides(current,0,0)){state='gameover';nameChars=['A','A','A'];namePos=0;sfxOver();if(score>hi)hi=score;}
+}
+
+function collides(piece,dx,dy){
+  for(let r=0;r<piece.shape.length;r++)for(let c=0;c<piece.shape[0].length;c++){
+    if(!piece.shape[r][c]) continue;
+    const nx=piece.x+c+dx, ny=piece.y+r+dy;
+    if(nx<0||nx>=COLS||ny>=ROWS) return true;
+    if(ny>=0 && board[ny][nx]) return true;
+  }
+  return false;
+}
+
+function merge(piece){
+  for(let r=0;r<piece.shape.length;r++)for(let c=0;c<piece.shape[0].length;c++){
+    if(piece.shape[r][c]){
+      const ny=piece.y+r, nx=piece.x+c;
+      if(ny>=0 && ny<ROWS) board[ny][nx]=piece.color;
+    }
+  }
+}
+
+function clearLines(){
+  let cleared=0;
+  for(let r=ROWS-1;r>=0;r--){
+    if(board[r].every(x=>x)){
+      board.splice(r,1);
+      board.unshift(new Array(COLS).fill(0));
+      cleared++;
+      r++;
+    }
+  }
+  if(cleared>0){
+    lines+=cleared;
+    const ptTable=[0,80,200,400,900];
+    score+=ptTable[cleared]*level;
+    const newLevel=Math.floor(lines/8)+1;
+    if(newLevel>level){level=newLevel;gravityI=Math.max(4,48-level*3);}
+    sfxClear(cleared);
+    flashT=12;
+  }
+}
+
+function rotate(piece){
+  const n=piece.shape.length,m=piece.shape[0].length;
+  const ns=[];
+  for(let i=0;i<m;i++){const row=[];for(let j=0;j<n;j++)row.push(piece.shape[n-1-j][i]);ns.push(row);}
+  const old=piece.shape;
+  piece.shape=ns;
+  if(!collides(piece,0,0))return true;
+  for(const[dx,dy]of[[1,0],[-1,0],[2,0],[-2,0],[0,-1]]){
+    if(!collides(piece,dx,dy)){piece.x+=dx;piece.y+=dy;return true;}
+  }
+  piece.shape=old;return false;
+}
+
+function lockPiece(){merge(current);clearLines();spawn();}
+
+function hardDrop(){
+  while(!collides(current,0,1)){current.y++;score+=2;}
+  sfxDrop();lockPiece();
+}
+
+function startGame(){state='playing';newBoard();score=0;lines=0;level=1;gravityI=48;gravityT=0;next=randomPiece();spawn();AC.resume();attract=false;attractStartT=Date.now();}
+
+// Input
+document.addEventListener('keydown',e=>{
+  if(['ArrowLeft','ArrowRight','ArrowDown','ArrowUp','Space'].includes(e.code)) e.preventDefault();
+  if(state==='title'){if(e.code==='Space')startGame();return;}
+  if(state==='ranking'){if(e.code==='Space'||e.code==='Enter')startGame();return;}
+  if(state==='gameover'){
+    if(e.code==='ArrowLeft'||e.code==='KeyA'){namePos=Math.max(0,namePos-1);snd(700,0.03,'square',0.03);}
+    else if(e.code==='ArrowRight'||e.code==='KeyD'){namePos=Math.min(2,namePos+1);snd(700,0.03,'square',0.03);}
+    else if(e.code==='ArrowUp'||e.code==='KeyW'){const i=LETTERS.indexOf(nameChars[namePos]);nameChars[namePos]=LETTERS[(i+1)%LETTERS.length];snd(500,0.03,'square',0.03);}
+    else if(e.code==='ArrowDown'||e.code==='KeyS'){const i=LETTERS.indexOf(nameChars[namePos]);nameChars[namePos]=LETTERS[(i-1+LETTERS.length)%LETTERS.length];snd(500,0.03,'square',0.03);}
+    else if(e.code==='Enter'){submitScore();}
+    return;
+  }
+  if(state==='playing'){
+    if(e.code==='ArrowLeft'||e.code==='KeyA'){if(!collides(current,-1,0)){current.x--;sfxMove();}}
+    else if(e.code==='ArrowRight'||e.code==='KeyD'){if(!collides(current,1,0)){current.x++;sfxMove();}}
+    else if(e.code==='ArrowDown'||e.code==='KeyS'){if(!collides(current,0,1)){current.y++;score++;gravityT=0;}}
+    else if(e.code==='ArrowUp'||e.code==='KeyW'||e.code==='KeyX'){rotate(current);sfxRotate();}
+    else if(e.code==='Space'){hardDrop();}
+  }
+});
+
+function addT(el,cb){el.addEventListener('touchstart',e=>{e.preventDefault();cb();},{passive:false});}
+addT(document.getElementById('tLeft'),()=>{
+  if(state==='playing'){if(!collides(current,-1,0)){current.x--;sfxMove();}}
+  else if(state==='title'||state==='ranking'){startGame();}
+});
+addT(document.getElementById('tRight'),()=>{
+  if(state==='playing'){if(!collides(current,1,0)){current.x++;sfxMove();}}
+  else if(state==='title'||state==='ranking'){startGame();}
+});
+addT(document.getElementById('tRot'),()=>{
+  if(state==='playing'){rotate(current);sfxRotate();}
+  else if(state==='title'||state==='ranking'){startGame();}
+  else if(state==='gameover'){submitScore();}
+});
+addT(document.getElementById('tDown'),()=>{
+  if(state==='playing'){hardDrop();}
+  else if(state==='title'||state==='ranking'){startGame();}
+});
+canvas.addEventListener('touchstart',()=>{
+  if(state==='title'||state==='ranking'){startGame();}
+},{passive:true});
+
+// Ranking API (DB with localStorage fallback for local file:// testing)
+const API_BASE=location.origin;
+const IS_LOCAL=location.protocol==='file:';
+function fetchRanking(){
+  if(IS_LOCAL){
+    rankingData=JSON.parse(localStorage.getItem('bxRank')||'[]');
+    rankingLoaded=true;
+    if(rankingData.length>0) hi=Math.max(hi,rankingData[0].score);
+    return;
+  }
+  fetch(API_BASE+'/api/ranking/bloxfall').then(r=>r.json()).then(d=>{
+    rankingData=d;rankingLoaded=true;
+    if(d.length>0) hi=Math.max(hi,d[0].score);
+  }).catch(()=>{
+    rankingData=JSON.parse(localStorage.getItem('bxRank')||'[]');
+    rankingLoaded=true;
+    if(rankingData.length>0) hi=Math.max(hi,rankingData[0].score);
+  });
+}
+function saveLocal(name){
+  let local=JSON.parse(localStorage.getItem('bxRank')||'[]');
+  local.push({name,score,level});
+  local.sort((a,b)=>b.score-a.score);
+  local=local.slice(0,10);
+  localStorage.setItem('bxRank',JSON.stringify(local));
+  rankingData=local;
+  if(local.length>0) hi=Math.max(hi,local[0].score);
+}
+function submitScore(){
+  const name=nameChars.join('');
+  state='ranking';attract=false;attractStartT=Date.now();
+  if(IS_LOCAL){saveLocal(name);return;}
+  fetch(API_BASE+'/api/ranking/bloxfall',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,score,level})})
+    .then(r=>r.json()).then(d=>{rankingData=d;if(d.length>0)hi=Math.max(hi,d[0].score);})
+    .catch(()=>{saveLocal(name);});
+}
+fetchRanking();
+
+// Drawing
+function drawCell(gx,gy,color){
+  const px=gx*CELL+BX,py=gy*CELL+BY;
+  ctx.fillStyle=color;
+  ctx.fillRect(px+1,py+1,CELL-2,CELL-2);
+  ctx.fillStyle='rgba(255,255,255,0.35)';
+  ctx.fillRect(px+1,py+1,CELL-2,2);
+  ctx.fillRect(px+1,py+1,2,CELL-3);
+  ctx.fillStyle='rgba(0,0,0,0.35)';
+  ctx.fillRect(px+1,py+CELL-3,CELL-2,2);
+  ctx.fillRect(px+CELL-3,py+1,2,CELL-2);
+}
+
+function drawMini(gx,gy,color,size){
+  ctx.fillStyle=color;
+  ctx.fillRect(gx+1,gy+1,size-2,size-2);
+  ctx.fillStyle='rgba(255,255,255,0.3)';
+  ctx.fillRect(gx+1,gy+1,size-2,1);
+  ctx.fillRect(gx+1,gy+1,1,size-2);
+  ctx.fillStyle='rgba(0,0,0,0.3)';
+  ctx.fillRect(gx+1,gy+size-2,size-2,1);
+  ctx.fillRect(gx+size-2,gy+1,1,size-2);
+}
+
+function update(){
+  if(attract){
+    if(state==='title'){if(Date.now()-attractStartT>=3000){attractStartT=Date.now();state='ranking';fetchRanking();}}
+    else if(state==='ranking'){if(Date.now()-attractStartT>=3000){attractStartT=Date.now();state='title';}}
+  }
+  else if(state==='ranking'){
+    if(Date.now()-attractStartT>=3000){attractStartT=Date.now();state='title';attract=true;}
+  }
+  if(flashT>0)flashT--;
+  if(state!=='playing')return;
+  gravityT++;
+  if(gravityT>=gravityI){gravityT=0;if(!collides(current,0,1)){current.y++;}else{lockPiece();}}
+}
+
+function draw(){
+  ctx.fillStyle='#06060a';ctx.fillRect(0,0,W,H);
+
+  // Board bg
+  ctx.fillStyle='#0d0d14';
+  ctx.fillRect(BX,BY,BW,BH);
+
+  // Grid lines
+  ctx.strokeStyle='#1a1a26';ctx.lineWidth=1;
+  for(let c=1;c<COLS;c++){ctx.beginPath();ctx.moveTo(BX+c*CELL+0.5,BY);ctx.lineTo(BX+c*CELL+0.5,BY+BH);ctx.stroke();}
+  for(let r=1;r<ROWS;r++){ctx.beginPath();ctx.moveTo(BX,BY+r*CELL+0.5);ctx.lineTo(BX+BW,BY+r*CELL+0.5);ctx.stroke();}
+
+  // Board border
+  ctx.strokeStyle=flashT>0?'#fff':'#444';ctx.lineWidth=2;
+  ctx.strokeRect(BX-1,BY-1,BW+2,BH+2);
+
+  // Cells
+  if(board){
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      if(board[r][c])drawCell(c,r,board[r][c]);
+    }
+  }
+
+  // Current piece
+  if(state==='playing'&&current){
+    for(let r=0;r<current.shape.length;r++)for(let c=0;c<current.shape[0].length;c++){
+      if(current.shape[r][c])drawCell(current.x+c,current.y+r,current.color);
+    }
+  }
+
+  // Side panel
+  const PX=BX+BW+12;
+  ctx.textAlign='left';
+  ctx.font='7px "Press Start 2P"';
+  ctx.fillStyle='#8aa';ctx.fillText('SCORE',PX,BY+10);
+  ctx.fillStyle='#fff';ctx.font='9px "Press Start 2P"';ctx.fillText(''+score,PX,BY+24);
+  ctx.fillStyle='#8aa';ctx.font='7px "Press Start 2P"';ctx.fillText('LINES',PX,BY+44);
+  ctx.fillStyle='#fff';ctx.font='9px "Press Start 2P"';ctx.fillText(''+lines,PX,BY+58);
+  ctx.fillStyle='#8aa';ctx.font='7px "Press Start 2P"';ctx.fillText('LEVEL',PX,BY+78);
+  ctx.fillStyle='#fff';ctx.font='9px "Press Start 2P"';ctx.fillText(''+level,PX,BY+92);
+
+  ctx.fillStyle='#8aa';ctx.font='7px "Press Start 2P"';ctx.fillText('NEXT',PX,BY+116);
+  if(next){
+    const baseX=PX,baseY=BY+124;
+    const nw=next.shape[0].length,nh=next.shape.length;
+    const ms=10;
+    for(let r=0;r<nh;r++)for(let c=0;c<nw;c++){
+      if(next.shape[r][c])drawMini(baseX+c*ms,baseY+r*ms,next.color,ms);
+    }
+  }
+
+  ctx.fillStyle='#f44';ctx.font='7px "Press Start 2P"';ctx.fillText('HI',PX,BY+200);
+  ctx.fillStyle='#fff';ctx.font='8px "Press Start 2P"';ctx.fillText(''+hi,PX,BY+214);
+
+  // Title overlay
+  if(state==='title'){
+    ctx.fillStyle='rgba(0,0,0,0.75)';ctx.fillRect(0,0,W,H);
+    ctx.textAlign='center';
+    ctx.fillStyle='#7fd4d4';ctx.font='22px "Press Start 2P"';ctx.fillText('BLOX',W/2,H*0.24);
+    ctx.fillStyle='#e08585';ctx.fillText('FALL',W/2,H*0.32);
+    ctx.fillStyle='#fff';ctx.font='7px "Press Start 2P"';
+    ctx.fillText('PRESS SPACE OR TAP',W/2,H*0.44);
+    ctx.fillText('TO START',W/2,H*0.44+12);
+    ctx.fillStyle='#668';ctx.font='5px "Press Start 2P"';
+    ctx.fillText('ARROWS: MOVE',W/2,H*0.56);
+    ctx.fillText('UP/X: ROTATE',W/2,H*0.56+10);
+    ctx.fillText('DOWN: SOFT DROP',W/2,H*0.56+20);
+    ctx.fillText('SPACE: HARD DROP',W/2,H*0.56+30);
+    ctx.fillStyle='#f44';ctx.font='6px "Press Start 2P"';
+    ctx.fillText('HI-SCORE '+hi,W/2,H*0.82);
+  }
+
+  if(state==='gameover'){
+    ctx.fillStyle='rgba(0,0,0,0.85)';ctx.fillRect(0,0,W,H);
+    ctx.textAlign='center';
+    ctx.fillStyle='#f44';ctx.font='14px "Press Start 2P"';ctx.fillText('GAME OVER',W/2,H*0.18);
+    ctx.fillStyle='#fff';ctx.font='8px "Press Start 2P"';ctx.fillText('SCORE '+score,W/2,H*0.27);
+    if(score>=hi&&score>0){ctx.fillStyle='#ff4';ctx.font='6px "Press Start 2P"';ctx.fillText('NEW HIGH SCORE!',W/2,H*0.32);}
+    ctx.fillStyle='#0cf';ctx.font='7px "Press Start 2P"';ctx.fillText('ENTER NAME',W/2,H*0.40);
+    nameBlinkT++;
+    const fs=16;
+    for(let i=0;i<3;i++){
+      const cx=W/2-28+i*28;
+      const isA=i===namePos;
+      if(isA){
+        ctx.fillStyle='#ff4';ctx.font='6px "Press Start 2P"';
+        ctx.fillText('\u25B2',cx,H*0.46);
+        ctx.fillText('\u25BC',cx,H*0.60);
+      }
+      ctx.font=fs+'px "Press Start 2P"';
+      ctx.fillStyle=isA?(Math.floor(nameBlinkT/15)%2===0?'#ff4':'#fff'):'#fff';
+      ctx.fillText(nameChars[i],cx,H*0.54);
+    }
+    ctx.fillStyle='#668';ctx.font='5px "Press Start 2P"';
+    ctx.fillText('ARROWS:SELECT  ENTER:OK',W/2,H*0.72);
+  }
+
+  if(state==='ranking'){
+    ctx.fillStyle='rgba(0,0,0,0.9)';ctx.fillRect(0,0,W,H);
+    ctx.textAlign='center';
+    ctx.fillStyle='#ff4';ctx.font='14px "Press Start 2P"';ctx.fillText('TOP 10',W/2,H*0.08);
+    ctx.textAlign='left';
+    ctx.fillStyle='#f44';ctx.font='6px "Press Start 2P"';
+    ctx.fillText('RANK',W*0.08,H*0.14);
+    ctx.fillText('NAME',W*0.26,H*0.14);
+    ctx.fillText('SCORE',W*0.50,H*0.14);
+    ctx.fillText('LV',W*0.84,H*0.14);
+    for(let i=0;i<Math.min(10,rankingData.length);i++){
+      const r=rankingData[i];
+      const y=H*0.20+i*22;
+      ctx.fillStyle=i<3?'#ff6666':'#aaaaaa';ctx.font='9px "Press Start 2P"';
+      ctx.fillText(String(i+1).padStart(2,' '),W*0.08,y);
+      ctx.fillStyle=i===0?'#ffff00':(i<3?'#ffee66':'#ffffff');ctx.font='10px "Press Start 2P"';
+      ctx.fillText(r.name,W*0.26,y);
+      ctx.fillStyle='#ffffff';ctx.font='9px "Press Start 2P"';
+      ctx.fillText(String(r.score).padStart(6,' '),W*0.50,y);
+      ctx.fillStyle='#888888';
+      ctx.fillText(String(r.level||1).padStart(2,' '),W*0.84,y);
+    }
+    if(rankingData.length===0){
+      ctx.fillStyle='#666';ctx.font='6px "Press Start 2P"';
+      ctx.fillText('NO RECORDS YET',W/2,H*0.5);
+    }
+    ctx.textAlign='center';
+    ctx.fillStyle='#668';ctx.font='5px "Press Start 2P"';
+    ctx.fillText('SPACE: NEW GAME',W/2,H*0.92);
+  }
+}
+
+function loop(){update();draw();requestAnimationFrame(loop);}
+newBoard();
+next=randomPiece();
+loop();
+</script>
+</body>
+</html>

@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>WORLD ATHLETICS - 100M</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+body{background:#000;overflow:hidden;touch-action:none;font-family:'Press Start 2P',monospace;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
+canvas{background:#1a1a2e;image-rendering:pixelated;image-rendering:-moz-crisp-edges;max-width:100vw;max-height:100vh}
+.touch{position:fixed;bottom:18px;display:flex;gap:18px;z-index:50}
+.tbtn{width:72px;height:72px;border:2px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.08);color:#fff;border-radius:50%;font-family:'Press Start 2P',monospace;font-size:18px;display:flex;align-items:center;justify-content:center}
+#tL{left:18px}
+#tR{right:18px}
+#backBtn{position:fixed;top:12px;left:12px;z-index:200;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#94a3b8;font-size:10px;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:'Press Start 2P',monospace;text-decoration:none}
+</style>
+</head>
+<body>
+<a id="backBtn" href="index.html">← STADIUM</a>
+<canvas id="c" width="800" height="400"></canvas>
+<div class="touch">
+  <div class="tbtn" id="tL">A</div>
+  <div class="tbtn" id="tR">D</div>
+</div>
+<script>
+// ===== Shared session schema (must match olympic.html) =====
+const SESSION_KEY = 'olympicSession';
+const EVENT_ID = '100m';
+function loadSession(){ try{ return JSON.parse(localStorage.getItem(SESSION_KEY)||'null') || null; }catch(e){ return null; } }
+function saveResult(raw, pts){
+  let s = loadSession() || {startedAt:Date.now(), events:{}};
+  s.events = s.events || {};
+  s.events[EVENT_ID] = {raw, pts};
+  localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+}
+// 100m: 14.0s = 0pt, lower time = higher pts, no upper cap
+// Formula: pts = max(0, round((14 - time) * 1000))
+// Examples: 14s=0, 10s=4000, 6s=8000, 4.42s=9580, 4s=10000, 3s=11000
+function calcPoints(timeSec){
+  return Math.max(0, Math.round((14 - timeSec) * 1000));
+}
+
+// ===== Sprite (36x32, 6 frames) — from olympic_preview_2.html =====
+const COLORS = {
+  '.': null,
+  'o': '#1a1a1a',  // outline / shoes
+  'H': '#111111',  // black hair
+  'S': '#fdd6a8',  // skin
+  'W': '#2563eb',  // blue top
+  'G': '#0b1e4f',  // navy shorts
+  'g': '#0a1735',  // darker navy shoe detail
+};
+const COLORS_AI = {
+  '.': null,
+  'o': '#1a1a1a',
+  'H': '#3b1d0a',  // brown hair
+  'S': '#fdd6a8',
+  'W': '#dc2626',  // red top
+  'G': '#7f1d1d',  // dark red shorts
+  'g': '#450a0a',
+};
+const SPRITE_W = 36, SPRITE_H = 32;
+const FRAMES = [
+[
+  '...................oooo.............',
+  '.................ooHHHo.............',
+  '.................oHHHHo.............',
+  '.................oSSSSo..So.........',
+  '.................oSSSSo..So.........',
+  '..................SSSo...So.........',
+  '................oSSSSo...So.........',
+  '...............SSoSSSSo.So..........',
+  '..............SoooWWWWWoSo..........',
+  '.............So...oWWWoSo...........',
+  '.............So...oWWWoSo...........',
+  '.............So...oWWWoo............',
+  '............So....oWWWo.............',
+  '............So....oWWWo.............',
+  '..................oWWWo.............',
+  '..................oWWWo.............',
+  '..................GGGGGo............',
+  '.................oGGGGGGGo..........',
+  '................oGGGGGGGGGoo........',
+  '...............oGGGGGooGGGGGoo......',
+  '..............oGGGGoo..ooooGGGo.....',
+  '.............oGGGGo........oGGo.....',
+  '..........oooSSSoo..........oSo.....',
+  '.........oSSSSoo............oSo.....',
+  '....oooooSSooo..............oSo.....',
+  '...oSSSSooo.................oo......',
+  '..oSSooo....................oo......',
+  '..oSo.......................oo......',
+  '..oo........................oo......',
+  '............................ogo.....',
+  '............................oggooo..',
+  '............................oooooo..',
+],
+[
+  '.................ooo................',
+  '................oHHHo...............',
+  '...............oHHHHHo..............',
+  '...............oSSSSo...............',
+  '...............oSSSSo...............',
+  '...............oSSSo................',
+  '..............oSSSo.................',
+  '.............oSSoSSo................',
+  '............oWoWWWWWo...............',
+  '............So.oWWWWWo....So........',
+  '............So.oWWWWWoooSSSSSo......',
+  '............So..oWWWWooooo..........',
+  '............So..oWWWo...............',
+  '.............So.oWWWo...............',
+  '............oSo.oWWWo...............',
+  '............oo..oWWWo...............',
+  '................GGGGG...............',
+  '................GGGGGG..............',
+  '...............oGGGGGGGoo...........',
+  '..............oGGGGGGGGGGoo.........',
+  '..............oGGGoooooGGGGo........',
+  '..............oGGo.....oooGGo.......',
+  '....o........oSSo.........oSo.......',
+  '..ooSo...ooooSSo..........oSSo......',
+  '.oSSSSoooSSSSSSo...........oSo......',
+  'oSSoooooooooSSo............oSo......',
+  'ooo.........oo..............oSo.....',
+  '............................oSo.....',
+  '.............................oSo....',
+  '..............................ogoooo',
+  '..............................oggoo.',
+  '..............................ooo...',
+],
+[
+  '..................oooo..............',
+  '.................oHHHo..............',
+  '................oHHHHo..............',
+  '................oSSSSo..............',
+  '................oSSSo...............',
+  '.................oSSo...............',
+  '................oSSSo...............',
+  '...............oSSoSSo..............',
+  '...............oWoWWWWWo............',
+  '..............So.oWWWWSSSSSo........',
+  '..............So.oWWWWoooooo........',
+  '..............So.oWWWo..............',
+  '..............So.oWWWo..............',
+  '..............So.oWWWo..............',
+  '..............So.oWWWo..............',
+  '..............So.oWWWo..............',
+  '.................GGGGGG.............',
+  '.................GGGGGGo............',
+  '.................oGGGGGGo...........',
+  '.................oGGoooGGo..........',
+  '.................oGo...oGo..........',
+  '.................oGo...oGG..........',
+  '.........oo......oSo...oSo..........',
+  '.......ooSSooooooSSo...oSo..........',
+  '......oSSSSSSSSoSSo....oSo..........',
+  '......ooooooooo.oo.....oSo..........',
+  '........................oo..........',
+  '........................oo..........',
+  '........................oo..........',
+  '........................ogo.........',
+  '.......................ogggoo.......',
+  '........................ooooo.......',
+],
+[
+  '................ooo.................',
+  '...............oHHHo................',
+  '...............oHHHH................',
+  '..............oSSSo.................',
+  '...............oSo..................',
+  '...............oSo..................',
+  '..............oSSSo.................',
+  '.............oSSoSo.................',
+  '.............oWWWWo.................',
+  '..............oWWWo.................',
+  '..............oWWWWooooo............',
+  '...............oWWo....o............',
+  '...............oWWo.................',
+  '...............oWWo.................',
+  '...............WWWo.................',
+  '...............GGGG.................',
+  '...............GGGGG................',
+  '...............oGGGGG...............',
+  '...............oGGGoGGo.............',
+  '.............oo.oGo.oGo.............',
+  '.............oGoGGGoGGG.............',
+  '.............oGoGGGooGo.............',
+  '............oSo.oSo.................',
+  '............oo.oSo..................',
+  '...............oo...................',
+  '..............oSo...................',
+  '..............oo....................',
+  '.............oSo....................',
+  '............oSo.....................',
+  '............ogo.....................',
+  '.............ogo....................',
+  '..............oo....................',
+],
+[
+  '.................oooo...............',
+  '................oHHHo...............',
+  '................oHHHo...............',
+  '................oSSSo...............',
+  '.................SSo................',
+  '.................SSo................',
+  '...............oSSSSo...............',
+  '..............ooWWWo...............',
+  '..............So.oWWo...............',
+  '.............So..oWWo...............',
+  '.............So..oWWo...............',
+  '.............So..oWWWSSSS...........',
+  '.............So..oWWWoooo...........',
+  '.............So.oWWWo...............',
+  '................oWWWo...............',
+  '................oGGGG...............',
+  '................oGGGGGGo............',
+  '................oGGGGGGGo...........',
+  '................oGGooooGGoo.........',
+  '................oGo....oGGo.........',
+  '................oGo..ooGGGo.........',
+  '................oGGooGGooo..........',
+  '................oSSSooo.............',
+  '..............ooSSSo................',
+  '.............oSSoSo.................',
+  '............oSoo.oo.................',
+  '..........ooSo....o.................',
+  '.........oSSo.......................',
+  '.........oSo........................',
+  '.........ogo........................',
+  '..........oo........................',
+  '..........oo........................',
+],
+[
+  '..................oooo..............',
+  '.................oHHHo..............',
+  '.................oHHHo..............',
+  '................oSSSSo...So.........',
+  '.................oSSo....o..........',
+  '.................oSSo...So..........',
+  '...............ooSSSo...So..........',
+  '..............oSoSSoSo.So...........',
+  '..............oo.oWWWWoWo...........',
+  '..............oo.oWWWo..............',
+  '..............oo.oWWWo..............',
+  '...............o.oWWWo..............',
+  '..............oo..oWWo..............',
+  '..............oo..oWWo..............',
+  '.................oWWGGo.............',
+  '.................oGGGGGo............',
+  '.................oGGGGGGoo..........',
+  '................oGGGGGGGGGGo........',
+  '................oGGGo.oooGGGo.......',
+  '...............oGGGo.....oGGo.......',
+  '...............oGGo.....oGGo........',
+  '..............oGGo.....oGoo.........',
+  '............ooSSo......oo...........',
+  '...........oSSoo.....ooo............',
+  '..........oSSo......oSSo............',
+  '.........oSoo.......oSo.............',
+  '......oooSo..........oo.............',
+  '......oSSo...........oo.............',
+  '......oSo.............o.............',
+  '......ogo...........................',
+  '.......oo...........................',
+  '.......oo...........................',
+],
+];
+// Special pose frames (placeholder: reuse the most compact running frame)
+const VICTORY_FRAME = FRAMES[3];
+const DEFEAT_FRAME = FRAMES[3];
+
+function renderSprite(ctx, frameOrIdx, ox, oy, scale, palette){
+  const f = (typeof frameOrIdx === 'number') ? FRAMES[frameOrIdx] : frameOrIdx;
+  const pal = palette || COLORS;
+  for(let y=0;y<SPRITE_H;y++){
+    const row = f[y];
+    for(let x=0;x<SPRITE_W;x++){
+      const col = pal[row[x]];
+      if(col){ ctx.fillStyle = col; ctx.fillRect(ox+x*scale, oy+y*scale, scale, scale); }
+    }
+  }
+}
+
+// Animated tears for DEFEAT pose. Eyes are around col 2, row 8 in DEFEAT_FRAME.
+function drawTears(ox, oy, scale){
+  const eyeX = ox + 2 * scale + Math.floor(scale / 2);
+  const eyeY = oy + 9 * scale;
+  const t = Date.now() * 0.0028;
+  const FALL = 14 * scale;
+  for(let i = 0; i < 3; i++){
+    const phase = (t + i * 0.34) % 1;
+    const ty = eyeY + phase * FALL;
+    const alpha = phase < 0.85 ? 1 : (1 - (phase - 0.85) / 0.15);
+    ctx.fillStyle = 'rgba(125,211,252,' + alpha + ')';
+    ctx.fillRect(eyeX - 1, ty, 3, 5);
+    ctx.fillRect(eyeX, ty - 1, 1, 1);
+  }
+}
+
+// ===== Game =====
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+const W = 800, H = 400;
+
+// Audio
+const AC = new (window.AudioContext || window.webkitAudioContext)();
+function snd(f, d, t, v){ const o=AC.createOscillator(),g=AC.createGain(); o.type=t||'square'; o.frequency.value=f; g.gain.setValueAtTime(v||0.08,AC.currentTime); g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+d); o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime+d); }
+
+let state = 'title';   // title / countdown / racing / roundEnd / final
+let lastKey = null;    // 'L' | 'R'
+let speed = 0;         // 0..MAX_SPEED
+let dist = 0;          // 0..GOAL
+let elapsed = 0;       // frames
+let countdownStart = 0;
+let frameTimer = 0;
+let curFrame = 0;
+let flashTimer = 0;
+let result = null;     // current round result {time, pts, dq, won, aiTime}
+
+// Round system
+const MAX_ROUNDS = 3;
+const AI_TIMES = [7.80, 7.50, 7.20];  // R1, R2, R3 — gradually harder
+let currentRound = 1;
+let roundResults = [];   // [{won, time, pts, dq, aiTime}, ...]
+let playerWins = 0;
+let aiWins = 0;
+let roundEndAt = 0;      // timestamp when current round ended (for 10s auto-advance)
+const AUTO_ADVANCE_MS = 10000;
+
+// AI opponent (per-round, reset each round)
+let ai = {dist:0, frame:0, frameTimer:0, finished:false, finishTime:0, finishedAtMs:0};
+let aiTargetTime = AI_TIMES[0];
+let aiMetersPerFrame = 100 / (aiTargetTime * 60);
+const FORFEIT_DEADLINE_MS = 8000;  // forfeit if player doesn't finish within 8s after AI
+
+const MAX_SPEED = 11;
+const PRESS_GAIN = 0.38;
+const DECAY = 0.065;
+const GOAL = 100;     // meters
+const METERS_PER_SPEED = 0.045;
+
+function setRoundAI(roundIdx){
+  aiTargetTime = AI_TIMES[roundIdx];
+  aiMetersPerFrame = 100 / (aiTargetTime * 60);
+}
+
+function reset(){
+  state='title'; lastKey=null; speed=0; dist=0; elapsed=0;
+  curFrame=0; frameTimer=0; result=null; flashTimer=0;
+  ai = {dist:0, frame:0, frameTimer:0, finished:false, finishTime:0};
+  currentRound = 1;
+  roundResults = [];
+  playerWins = 0;
+  aiWins = 0;
+  setRoundAI(0);
+}
+function startCountdown(){
+  state='countdown';
+  countdownStart = Date.now();
+  AC.resume();
+}
+function startRace(){
+  state='racing';
+  speed=0; dist=0; elapsed=0;
+  ai.dist=0; ai.frame=0; ai.frameTimer=0; ai.finished=false; ai.finishTime=0; ai.finishedAtMs=0;
+  lastKey=null;
+  snd(800, 0.15, 'square', 0.12);
+}
+function startNextRound(){
+  currentRound++;
+  setRoundAI(currentRound - 1);
+  startCountdown();
+}
+function endRace(playerWon, isForfeit){
+  const time = elapsed / 60;
+  const aiTime = ai.finishTime || (elapsed / 60);
+  let roundEntry;
+  if(playerWon){
+    const pts = calcPoints(time);
+    roundEntry = {won:true, time, pts, dq:false, aiTime, forfeited:false};
+    playerWins++;
+    snd(600, 0.2, 'sine'); setTimeout(()=>snd(900, 0.3, 'sine'), 150);
+  } else {
+    roundEntry = {won:false, time, pts:0, dq:true, aiTime, forfeited:!!isForfeit};
+    aiWins++;
+    snd(220, 0.4, 'sawtooth', 0.1);
+    setTimeout(()=>snd(180, 0.4, 'sawtooth', 0.1), 200);
+  }
+  roundResults.push(roundEntry);
+  result = roundEntry;
+  roundEndAt = Date.now();
+
+  // Decide: more rounds, eliminate, or final
+  const eliminated = aiWins >= 2;
+  const allDone = currentRound >= MAX_ROUNDS;
+  if(eliminated || allDone){
+    state = 'final';
+    // Save final score (best round points)
+    const bestPts = roundResults.reduce((m, r) => Math.max(m, r.pts), 0);
+    const bestRound = roundResults.find(r => r.pts === bestPts) || roundResults[0];
+    saveResult(bestRound.time, bestPts);
+  } else {
+    state = 'roundEnd';
+  }
+}
+
+function pressKey(side){
+  if(state === 'title'){ startCountdown(); return; }
+  // Note: A/D do NOT navigate from finished state (use Enter/Space/Esc instead)
+  if(state !== 'racing') return;
+  if(lastKey !== side){
+    speed = Math.min(MAX_SPEED, speed + PRESS_GAIN);
+    lastKey = side;
+    flashTimer = 4;
+  }
+}
+
+window.addEventListener('keydown', e => {
+  if(e.code === 'ArrowLeft' || e.code === 'KeyA') pressKey('L');
+  else if(e.code === 'ArrowRight' || e.code === 'KeyD') pressKey('R');
+  else if(e.code === 'Space'){
+    if(state==='title') startCountdown();
+    else if(state==='roundEnd') startNextRound();
+  }
+  else if(e.code === 'Enter'){
+    if(state==='title') startCountdown();
+    else if(state==='final') location.href='olympic.html';
+    else if(state==='roundEnd') startNextRound();
+  }
+  else if(e.code === 'Escape'){ location.href='olympic.html'; }
+});
+
+function addT(el, side){
+  el.addEventListener('touchstart', e => { e.preventDefault(); pressKey(side); }, {passive:false});
+  el.addEventListener('mousedown', e => { e.preventDefault(); pressKey(side); });
+}
+addT(document.getElementById('tL'), 'L');
+addT(document.getElementById('tR'), 'R');
+
+// Touch handlers for round transitions (finished states)
+canvas.addEventListener('touchstart', e => {
+  if(state === 'roundEnd' && Date.now() - roundEndAt > 800){
+    startNextRound();
+  } else if(state === 'final' && Date.now() - roundEndAt > 800){
+    location.href = 'olympic.html';
+  }
+}, {passive:true});
+canvas.addEventListener('mousedown', e => {
+  if(state === 'roundEnd' && Date.now() - roundEndAt > 800){
+    startNextRound();
+  } else if(state === 'final' && Date.now() - roundEndAt > 800){
+    location.href = 'olympic.html';
+  }
+});
+
+// ===== Drawing =====
+function drawTrack(scrollX){
+  // ===== Stadium roof / background (black) =====
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, 140);
+
+  // Crowd — single row, original small figures (moved up with fence)
+  const crowdY = 108;
+  const colSpacing = 14;
+  const crowdCols = ['#f97316','#ea580c','#fb923c','#dc2626','#fbbf24','#22d3ee','#f472b6','#84cc16'];
+  for(let col=0; col<80; col++){
+    const x = ((col*colSpacing + ((col%2)*7)) - Math.floor(scrollX*0.05) % colSpacing);
+    // Head
+    ctx.fillStyle = '#fed7aa';
+    ctx.fillRect(x+1, crowdY, 7, 6);
+    // Neck shadow
+    ctx.fillStyle = '#7c2d12';
+    ctx.fillRect(x+1, crowdY+6, 7, 1);
+    // Body (torso)
+    ctx.fillStyle = crowdCols[col % crowdCols.length];
+    ctx.fillRect(x, crowdY+6, 10, 10);
+    // Body shading
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(x+7, crowdY+7, 3, 8);
+  }
+
+  // ===== FENCE (light gray, no text) — moved up 15px =====
+  ctx.fillStyle = '#cbd5e1';
+  ctx.fillRect(0, 125, W, 55);
+  // Top edge subtle
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillRect(0, 125, W, 2);
+  // Bottom edge — darker line marking fence/grass boundary
+  ctx.fillStyle = '#475569';
+  ctx.fillRect(0, 175, W, 5);
+
+  // ===== Track area (orange clay with horizontal stripes) =====
+  // Top grass strip — grew by 15px (55 → 70px)
+  ctx.fillStyle = '#166534';
+  ctx.fillRect(0, 180, W, 70);
+  ctx.fillStyle = '#15803d';
+  ctx.fillRect(0, 246, W, 2);
+
+  // Main clay track with alternating horizontal stripes
+  for(let y = 250; y < H; y += 4){
+    ctx.fillStyle = (Math.floor(y/4)%2===0) ? '#c04820' : '#9a3412';
+    ctx.fillRect(0, y, W, 4);
+  }
+
+  // Back lane (AI) 250-300 (50px)
+  // Middle grass 300-308
+  ctx.fillStyle = '#166534';
+  ctx.fillRect(0, 300, W, 8);
+  ctx.fillStyle = '#15803d';
+  ctx.fillRect(0, 300, W, 2);
+  ctx.fillRect(0, 306, W, 2);
+
+  // Front lane (player) 308-358 (50px)
+  // Bottom grass 358-400 (42px)
+  ctx.fillStyle = '#166534';
+  ctx.fillRect(0, 358, W, H-358);
+  ctx.fillStyle = '#15803d';
+  ctx.fillRect(0, 358, W, 2);
+
+  // ===== Distance markers on bottom grass (100M start → 20M last) =====
+  // screenX = worldX*pxm - scrollX + playerScreenOffset
+  // (same formula as drawFinishLine and drawRunners so markers align with player/finish)
+  const pixelsPerMeter = 24;
+  const playerScreenOffset = W * 0.28;
+  const MARK_POS    = [0,     20,   40,   60,   80  ];
+  const MARK_LABELS = ['100', '80', '60', '40', '20'];
+  ctx.textAlign = 'center';
+  for(let i=0; i<MARK_POS.length; i++){
+    const worldX = MARK_POS[i];
+    const screenX = worldX * pixelsPerMeter - scrollX + playerScreenOffset;
+    if(screenX > -40 && screenX < W + 40){
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(screenX - 1, 362, 2, 6);
+      ctx.fillStyle = '#fff';
+      ctx.font = '10px "Press Start 2P"';
+      ctx.fillText(MARK_LABELS[i] + 'M', screenX, 383);
+    }
+  }
+}
+
+function drawFinishLine(scrollX){
+  // Finish line is at world x = GOAL * pixelsPerMeter
+  const pixelsPerMeter = 24;
+  const lineWorldX = GOAL * pixelsPerMeter;
+  const screenX = lineWorldX - scrollX + W * 0.28;  // runner anchored
+  if(screenX > -20 && screenX < W+20){
+    // checkered pole spanning both lanes
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(screenX, 250, 4, 108);
+    // checker pattern
+    for(let y=253; y<358; y+=8){
+      ctx.fillStyle = (Math.floor(y/8)%2===0) ? '#fff' : '#000';
+      ctx.fillRect(screenX-12, y, 8, 8);
+      ctx.fillStyle = (Math.floor(y/8)%2===0) ? '#000' : '#fff';
+      ctx.fillRect(screenX-4, y, 8, 8);
+      ctx.fillStyle = (Math.floor(y/8)%2===0) ? '#fff' : '#000';
+      ctx.fillRect(screenX+4, y, 8, 8);
+      ctx.fillStyle = (Math.floor(y/8)%2===0) ? '#000' : '#fff';
+      ctx.fillRect(screenX+12, y, 8, 8);
+    }
+    // FINISH banner above top grass
+    ctx.fillStyle = '#fbbf24';
+    ctx.fillRect(screenX-30, 230, 64, 16);
+    ctx.fillStyle = '#000';
+    ctx.font = '8px "Press Start 2P"';
+    ctx.textAlign = 'center';
+    ctx.fillText('FINISH', screenX+2, 242);
+  }
+}
+
+function drawRunners(){
+  const scale = 3;
+  const pixelsPerMeter = 24;
+
+  // Lane baselines (where shadow/feet sit on ground)
+  // Back lane 250-300 (AI 50px), Middle grass 300-308, Front lane 308-358 (Player 50px)
+  const PLAYER_BASELINE_Y = 332;  // raised toward lane center
+  const AI_BASELINE_Y = 274;      // raised toward lane center
+
+  // Player anchored at x=W*0.28 on screen; AI offset by world distance diff
+  // The finish line is at this same anchor point when dist = GOAL (race completed)
+  const FINISH_LINE_X = W * 0.28;
+  let playerScreenX = FINISH_LINE_X;
+  let aiScreenX = playerScreenX + (ai.dist - dist) * pixelsPerMeter;
+
+  // At end states, override positions so player is offset from the finish line
+  // Win: player jumps to the RIGHT of finish line (past it, celebrating)
+  // Lose: player slumps to the LEFT of finish line (didn't cross / crossed after)
+  const atEnd = (state==='roundEnd' || state==='final') && result;
+  const playerWonRound = (state==='roundEnd' && result && result.won) ||
+                         (state==='final' && playerWins > aiWins);
+  if(atEnd){
+    if(playerWonRound){
+      // Player right of finish line; AI defeated at far left
+      playerScreenX = FINISH_LINE_X + 70;
+      aiScreenX = FINISH_LINE_X - 90;
+    } else {
+      // Player left of finish line (didn't cross or crossed late)
+      // AI celebrates to the right of finish line
+      playerScreenX = FINISH_LINE_X - 80;
+      aiScreenX = FINISH_LINE_X + 60;
+    }
+  }
+
+  // Determine pose based on state + result
+  // Pose: show victory/defeat in both roundEnd (per round) and final (series result)
+  let playerWon = false, playerLost = false;
+  if(state==='roundEnd' && result){
+    playerWon = result.won;
+    playerLost = !result.won;
+  } else if(state==='final'){
+    playerWon = playerWins > aiWins;
+    playerLost = playerWins <= aiWins;
+  }
+
+  // Victory bounce (used by winner)
+  const t = Date.now() * 0.012;
+  const bounce = Math.max(0, Math.sin(t) * 12);
+
+  // Hide AI when current round was forfeited (player alone on track)
+  const hideAI = state==='roundEnd' && result && result.forfeited;
+
+  // ===== AI runner (back lane, drawn first) =====
+  if(!hideAI && aiScreenX > -SPRITE_W*scale && aiScreenX < W + SPRITE_W*scale){
+    const ax = aiScreenX - SPRITE_W*scale/2;
+    const ay = AI_BASELINE_Y - SPRITE_H*scale + 12;
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath();
+    ctx.ellipse(aiScreenX, AI_BASELINE_Y, 24, 4, 0, 0, Math.PI*2);
+    ctx.fill();
+    if(playerLost){
+      // AI won → AI celebrates
+      renderSprite(ctx, VICTORY_FRAME, ax, ay - bounce, scale, COLORS_AI);
+    } else if(playerWon){
+      // Player won → AI defeated
+      renderSprite(ctx, DEFEAT_FRAME, ax, ay, scale, COLORS_AI);
+    } else {
+      renderSprite(ctx, ai.frame, ax, ay, scale, COLORS_AI);
+    }
+  }
+
+  // ===== Player runner (front lane) =====
+  const sx = playerScreenX - SPRITE_W*scale/2;
+  const sy = PLAYER_BASELINE_Y - SPRITE_H*scale + 12;
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.beginPath();
+  ctx.ellipse(playerScreenX, PLAYER_BASELINE_Y, 26, 5, 0, 0, Math.PI*2);
+  ctx.fill();
+  if(playerWon){
+    // Polkapolka victory bounce
+    renderSprite(ctx, VICTORY_FRAME, sx, sy - bounce, scale, COLORS);
+  } else if(playerLost){
+    // OTL defeat pose
+    renderSprite(ctx, DEFEAT_FRAME, sx, sy, scale, COLORS);
+  } else {
+    renderSprite(ctx, curFrame, sx, sy, scale, COLORS);
+  }
+
+}
+
+function drawHUD(){
+  // Solid black top bar — extended to cover more area (removed top crowd row fits here)
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, 105);
+
+  // Round indicator (top center)
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fbbf24'; ctx.font = '12px "Press Start 2P"';
+  ctx.fillText('ROUND ' + currentRound + ' / ' + MAX_ROUNDS, W/2, 16);
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#fbbf24'; ctx.font = '8px "Press Start 2P"';
+  ctx.fillText('TIME', 14, 40);
+  ctx.fillStyle = '#fff'; ctx.font = '12px "Press Start 2P"';
+  ctx.fillText((elapsed/60).toFixed(2) + 's', 14, 58);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fbbf24'; ctx.font = '8px "Press Start 2P"';
+  ctx.fillText('DIST', W/2, 40);
+  ctx.fillStyle = '#fff'; ctx.font = '12px "Press Start 2P"';
+  ctx.fillText(Math.min(GOAL, dist).toFixed(1) + 'm', W/2, 58);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#fbbf24'; ctx.font = '8px "Press Start 2P"';
+  ctx.fillText('SPEED', W-14, 40);
+  ctx.fillStyle = speed > 8 ? '#22c55e' : speed > 4 ? '#fef3c7' : '#94a3b8';
+  ctx.font = '12px "Press Start 2P"';
+  ctx.fillText((speed/MAX_SPEED*100).toFixed(0)+'%', W-14, 58);
+
+  // Race progress bar (you vs AI) — inside HUD, lower
+  const barX = W/2-140, barY = 80, barW = 280, barH = 10;
+  ctx.fillStyle = '#1e293b'; ctx.fillRect(barX, barY, barW, barH);
+  // AI progress (blue, on top)
+  ctx.fillStyle = '#3b82f6';
+  ctx.fillRect(barX, barY, barW * Math.min(1, ai.dist/GOAL), barH/2);
+  // Player progress (red, on bottom)
+  ctx.fillStyle = '#dc2626';
+  ctx.fillRect(barX, barY+barH/2, barW * Math.min(1, dist/GOAL), barH/2);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+  ctx.strokeRect(barX, barY, barW, barH);
+  // labels
+  ctx.textAlign = 'left'; ctx.font = '6px "Press Start 2P"';
+  ctx.fillStyle = '#3b82f6'; ctx.fillText('AI', barX-16, barY+4);
+  ctx.fillStyle = '#dc2626'; ctx.fillText('YOU', barX-22, barY+barH);
+
+  // Speed bar — at bottom of canvas (below distance markers, in bottom area)
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(W/2-100, 378, 200, 8);
+  ctx.fillStyle = speed > 8 ? '#22c55e' : speed > 4 ? '#fbbf24' : '#94a3b8';
+  ctx.fillRect(W/2-100, 378, 200*(speed/MAX_SPEED), 8);
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(W/2-100, 378, 200, 8);
+
+  // MASH hint — moved further down below speed bar
+  if(state==='racing'){
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#666'; ctx.font = '6px "Press Start 2P"';
+    ctx.fillText('MASH ← →   /   A D', W/2, 395);
+    if(lastKey){
+      ctx.fillStyle = lastKey==='L' ? (flashTimer>0?'#22d3ee':'#475569') : '#475569';
+      ctx.fillRect(W/2-50, 391, 6, 3);
+      ctx.fillStyle = lastKey==='R' ? (flashTimer>0?'#22d3ee':'#475569') : '#475569';
+      ctx.fillRect(W/2+44, 391, 6, 3);
+    }
+  }
+}
+
+function drawTitle(){
+  drawTrack(0);
+  curFrame = 0;
+  // show both runners side by side on title for context
+  ai.dist = 0; ai.frame = 2;
+  drawRunners();
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(0, 50, W, 170);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fbbf24'; ctx.font = '24px "Press Start 2P"';
+  ctx.fillText('100M SPRINT', W/2, 90);
+  ctx.fillStyle = '#fff'; ctx.font = '9px "Press Start 2P"';
+  ctx.fillText('MASH ← →  OR  A D  ALTERNATELY', W/2, 118);
+  ctx.fillText('FASTER MASHING = FASTER RUN', W/2, 134);
+  ctx.fillStyle = '#ef4444'; ctx.font = '7px "Press Start 2P"';
+  ctx.fillText('⚠ BEST OF 3 ROUNDS · LOSE 2 TO AI = ELIMINATED', W/2, 156);
+  ctx.fillStyle = '#3b82f6'; ctx.font = '7px "Press Start 2P"';
+  ctx.fillText('AI TIMES   R1 ' + AI_TIMES[0].toFixed(2) + 's   R2 ' + AI_TIMES[1].toFixed(2) + 's   R3 ' + AI_TIMES[2].toFixed(2) + 's', W/2, 172);
+  ctx.fillStyle = '#a5f3fc'; ctx.font = '10px "Press Start 2P"';
+  ctx.fillText('PRESS SPACE OR TAP TO START', W/2, 196);
+  ctx.fillStyle = '#666'; ctx.font = '7px "Press Start 2P"';
+  ctx.fillText('14.0s = 0 PTS    6.0s = 1000 PTS', W/2, 214);
+}
+
+function drawCountdown(){
+  drawTrack(0);
+  drawRunners();
+  drawHUD();
+  const elap = (Date.now() - countdownStart) / 1000;
+  let txt = '';
+  if(elap < 1) txt = '3';
+  else if(elap < 2) txt = '2';
+  else if(elap < 3) txt = '1';
+  else if(elap < 3.5){ txt = 'GO!'; if(state==='countdown'){ startRace(); } }
+  ctx.textAlign = 'center';
+
+  // Helper to draw text with black outline
+  function drawOutlinedText(text, x, y, fontSize, fillColor){
+    ctx.font = fontSize + 'px "Press Start 2P"';
+    ctx.fillStyle = '#000';
+    // 8-direction outline
+    const o = Math.max(2, Math.round(fontSize/10));
+    for(const [dx,dy] of [[-o,-o],[0,-o],[o,-o],[-o,0],[o,0],[-o,o],[0,o],[o,o]]){
+      ctx.fillText(text, x+dx, y+dy);
+    }
+    ctx.fillStyle = fillColor;
+    ctx.fillText(text, x, y);
+  }
+
+  // Centered on screen (canvas middle)
+  const cx = W/2, cy = H/2;
+
+  // Round header (above center)
+  drawOutlinedText('ROUND ' + currentRound + ' / ' + MAX_ROUNDS, cx, cy - 30, 22, '#fbbf24');
+
+  // Countdown number (below center, large)
+  drawOutlinedText(txt, cx, cy + 50, 64, txt === 'GO!' ? '#22c55e' : '#fbbf24');
+}
+
+function bestPtsSoFar(){
+  return roundResults.reduce((m, r) => Math.max(m, r.pts), 0);
+}
+
+function drawRoundEnd(){
+  // Freeze view at finish line: scrollX as if player reached GOAL
+  const scrollX = GOAL * 24;
+  drawTrack(scrollX);
+  drawFinishLine(scrollX);
+  drawRunners();
+
+  const panelX = W - 300;
+  ctx.fillStyle = 'rgba(0,0,0,0.92)';
+  ctx.fillRect(panelX, 30, 290, 350);
+  ctx.strokeStyle = result.won ? '#22c55e' : '#ef4444';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(panelX, 30, 290, 350);
+
+  const cx = panelX + 145;
+  ctx.textAlign = 'center';
+
+  // Header
+  ctx.fillStyle = result.won ? '#22c55e' : '#ef4444';
+  ctx.font = '14px "Press Start 2P"';
+  ctx.fillText(result.won ? 'ROUND WON' : 'ROUND LOST', cx, 60);
+  ctx.fillStyle = '#fff'; ctx.font = '8px "Press Start 2P"';
+  ctx.fillText('ROUND ' + currentRound + ' / ' + MAX_ROUNDS, cx, 80);
+
+  // Times
+  ctx.fillStyle = '#fbbf24'; ctx.font = '7px "Press Start 2P"';
+  ctx.fillText('YOU', cx-60, 108);
+  ctx.fillText('AI', cx+60, 108);
+  ctx.fillStyle = result.forfeited ? '#ef4444' : '#fff'; ctx.font = '14px "Press Start 2P"';
+  ctx.fillText(result.forfeited ? 'DNF' : (result.time.toFixed(2) + 's'), cx-60, 130);
+  ctx.fillStyle = '#3b82f6';
+  ctx.fillText(result.aiTime.toFixed(2) + 's', cx+60, 130);
+
+  // Round points
+  ctx.fillStyle = '#fbbf24'; ctx.font = '7px "Press Start 2P"';
+  ctx.fillText('ROUND PTS', cx, 158);
+  ctx.fillStyle = result.pts >= 9000 ? '#22c55e' : result.pts >= 6000 ? '#fbbf24' : '#cbd5e1';
+  ctx.font = '20px "Press Start 2P"';
+  ctx.fillText(result.pts + '', cx, 184);
+
+  // Round-by-round table
+  ctx.fillStyle = '#666'; ctx.font = '7px "Press Start 2P"';
+  ctx.fillText('R1     R2     R3', cx, 215);
+  for(let i=0; i<MAX_ROUNDS; i++){
+    const x = cx - 60 + i*60;
+    const r = roundResults[i];
+    if(r){
+      ctx.fillStyle = r.won ? '#22c55e' : '#ef4444';
+      ctx.font = '10px "Press Start 2P"';
+      ctx.fillText(r.pts + '', x, 232);
+    } else {
+      ctx.fillStyle = '#475569'; ctx.font = '10px "Press Start 2P"';
+      ctx.fillText('--', x, 232);
+    }
+  }
+
+  // Score: player wins vs ai wins
+  ctx.fillStyle = '#94a3b8'; ctx.font = '7px "Press Start 2P"';
+  ctx.fillText('SCORE   YOU ' + playerWins + ' - ' + aiWins + ' AI', cx, 254);
+
+  // Best so far
+  const best = bestPtsSoFar();
+  ctx.fillStyle = '#fbbf24'; ctx.font = '7px "Press Start 2P"';
+  ctx.fillText('BEST SO FAR', cx, 280);
+  ctx.fillStyle = '#fff'; ctx.font = '14px "Press Start 2P"';
+  ctx.fillText(best + ' PTS', cx, 300);
+
+  // Next round AI
+  const nextRound = currentRound + 1;
+  ctx.fillStyle = '#3b82f6'; ctx.font = '7px "Press Start 2P"';
+  ctx.fillText('NEXT  R' + nextRound + '  AI ' + AI_TIMES[nextRound-1].toFixed(2) + 's', cx, 322);
+
+  // Auto-advance bar
+  const elap = Date.now() - roundEndAt;
+  const remain = Math.max(0, AUTO_ADVANCE_MS - elap);
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(panelX+30, 336, 230, 4);
+  ctx.fillStyle = '#22d3ee';
+  ctx.fillRect(panelX+30, 336, 230 * (remain/AUTO_ADVANCE_MS), 4);
+  ctx.fillStyle = '#a5f3fc'; ctx.font = '7px "Press Start 2P"';
+  ctx.fillText('SPACE: NEXT ROUND  (' + Math.ceil(remain/1000) + 's)', cx, 354);
+}
+
+function drawFinal(){
+  // Freeze view at finish line
+  const scrollX = GOAL * 24;
+  drawTrack(scrollX);
+  drawFinishLine(scrollX);
+  drawRunners();
+
+  const eliminated = aiWins >= 2;
+  const best = bestPtsSoFar();
+
+  // Right-side panel so player/AI poses stay visible
+  const panelX = W - 360;
+  const panelY = 30;
+  const panelW = 350;
+  const panelH = 350;
+  ctx.fillStyle = 'rgba(0,0,0,0.92)';
+  ctx.fillRect(panelX, panelY, panelW, panelH);
+  ctx.strokeStyle = eliminated ? '#ef4444' : '#fbbf24';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+  const cx = panelX + panelW/2;
+  ctx.textAlign = 'center';
+
+  // Header
+  ctx.fillStyle = eliminated ? '#ef4444' : '#22c55e';
+  ctx.font = '16px "Press Start 2P"';
+  ctx.fillText(eliminated ? 'ELIMINATED' : 'ALL ROUNDS DONE', cx, 64);
+
+  ctx.fillStyle = '#fff'; ctx.font = '8px "Press Start 2P"';
+  ctx.fillText('YOU ' + playerWins + ' - ' + aiWins + ' AI', cx, 88);
+
+  // Round details
+  ctx.fillStyle = '#94a3b8'; ctx.font = '7px "Press Start 2P"';
+  ctx.fillText('ROUND BREAKDOWN', cx, 116);
+
+  for(let i=0; i<MAX_ROUNDS; i++){
+    const y = 138 + i*28;
+    const r = roundResults[i];
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#fbbf24'; ctx.font = '8px "Press Start 2P"';
+    ctx.fillText('R' + (i+1), panelX+18, y);
+    if(r){
+      ctx.fillStyle = r.forfeited ? '#ef4444' : '#fff'; ctx.font = '8px "Press Start 2P"';
+      ctx.fillText(r.forfeited ? 'DNF' : (r.time.toFixed(2) + 's'), panelX+50, y);
+      ctx.fillStyle = '#3b82f6';
+      ctx.fillText('AI ' + r.aiTime.toFixed(2) + 's', panelX+135, y);
+      ctx.fillStyle = r.won ? '#22c55e' : '#ef4444';
+      ctx.fillText(r.won ? 'WIN' : (r.forfeited ? 'DNF' : 'LOSE'), panelX+230, y);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(r.pts + 'pt', panelX+285, y);
+    } else {
+      ctx.fillStyle = '#475569'; ctx.font = '8px "Press Start 2P"';
+      ctx.fillText('-- not played --', panelX+50, y);
+    }
+  }
+
+  // Best (final score)
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fbbf24'; ctx.font = '8px "Press Start 2P"';
+  ctx.fillText('BEST ROUND = FINAL SCORE', cx, 246);
+  ctx.fillStyle = best >= 9000 ? '#22c55e' : best >= 6000 ? '#fbbf24' : '#cbd5e1';
+  ctx.font = '24px "Press Start 2P"';
+  ctx.fillText(best + ' PTS', cx, 286);
+
+  ctx.fillStyle = '#a5f3fc'; ctx.font = '8px "Press Start 2P"';
+  ctx.fillText('PRESS ENTER FOR STADIUM', cx, 336);
+}
+
+function loop(){
+  if(state === 'racing'){
+    elapsed++;
+    speed = Math.max(0, speed - DECAY);
+    dist += speed * METERS_PER_SPEED;
+    flashTimer = Math.max(0, flashTimer - 1);
+
+    // Player frame anim
+    frameTimer += speed * 0.018;
+    if(frameTimer >= 1){
+      frameTimer = 0;
+      curFrame = (curFrame + 1) % FRAMES.length;
+    }
+
+    // AI advance (constant pace, varies per round)
+    if(!ai.finished){
+      ai.dist += aiMetersPerFrame;
+      ai.frameTimer += 0.16;
+      if(ai.frameTimer >= 1){ ai.frameTimer = 0; ai.frame = (ai.frame + 1) % FRAMES.length; }
+      if(ai.dist >= GOAL){
+        ai.dist = GOAL;
+        ai.finished = true;
+        ai.finishTime = elapsed / 60;
+        ai.finishedAtMs = Date.now();
+      }
+    }
+
+    // End condition: player must reach finish line.
+    if(dist >= GOAL){
+      dist = GOAL;
+      const playerWon = !ai.finished;
+      if(!ai.finished){
+        ai.finishTime = elapsed / 60 + (GOAL - ai.dist) / (aiMetersPerFrame * 60);
+      }
+      endRace(playerWon);
+    }
+    // Forfeit deadline: if AI finished and player hasn't crossed within FORFEIT_DEADLINE_MS, DQ
+    else if(ai.finished && Date.now() - ai.finishedAtMs > FORFEIT_DEADLINE_MS){
+      endRace(false, true);  // forfeit flag
+    }
+  }
+
+  // Auto-advance from roundEnd after 10 seconds
+  if(state === 'roundEnd' && Date.now() - roundEndAt > AUTO_ADVANCE_MS){
+    startNextRound();
+  }
+
+  if(state === 'title'){
+    drawTitle();
+  } else if(state === 'countdown'){
+    drawCountdown();
+  } else if(state === 'racing'){
+    const scrollX = dist * 24;
+    drawTrack(scrollX);
+    drawFinishLine(scrollX);
+    drawRunners();
+    drawHUD();
+  } else if(state === 'roundEnd'){
+    drawRoundEnd();
+  } else if(state === 'final'){
+    drawFinal();
+  }
+
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>

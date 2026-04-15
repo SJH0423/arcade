@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8">
+  <title>WORLD ATHLETICS - Sprite Preview v2 (lady 36x32)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+    body {
+      background: #0a0a0a;
+      color: #fff;
+      font-family: 'Press Start 2P', monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      margin: 0
+    }
+
+    h1 {
+      font-size: 18px;
+      color: #ffaa22;
+      margin: 10px 0 4px
+    }
+
+    p {
+      font-size: 8px;
+      color: #888;
+      margin: 0 0 16px
+    }
+
+    canvas {
+      background: #ffffff;
+      image-rendering: pixelated;
+      image-rendering: -moz-crisp-edges;
+      border: 2px solid #444;
+      display: block
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      margin: 14px 0
+    }
+
+    .controls button {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 9px;
+      padding: 8px 14px;
+      background: #1e293b;
+      color: #a5f3fc;
+      border: 1px solid #22d3ee;
+      cursor: pointer
+    }
+
+    .controls button:hover {
+      background: #22d3ee;
+      color: #000
+    }
+
+    .controls button.active {
+      background: #22d3ee;
+      color: #000
+    }
+
+    .label {
+      font-size: 8px;
+      color: #666;
+      margin-top: 18px
+    }
+
+    .framerow {
+      display: flex;
+      gap: 12px;
+      margin-top: 8px
+    }
+
+    .framerow canvas {
+      background: #ffffff;
+      border: 1px solid #334
+    }
+
+    .note {
+      font-size: 7px;
+      color: #444;
+      max-width: 700px;
+      text-align: center;
+      margin-top: 24px;
+      line-height: 1.7
+    }
+
+    a {
+      color: #22d3ee;
+      text-decoration: none
+    }
+  </style>
+</head>
+
+<body>
+  <h1>OLYMPIC RUNNER v3 — 36×32</h1>
+  <p>ladyb11.gif 실루엣에서 추출한 6프레임 달리기 사이클</p>
+
+  <canvas id="main" width="700" height="320"></canvas>
+
+  <div class="controls" id="speedControls">
+    <button data-spd="0.04">SLOW</button>
+    <button data-spd="0.08" class="active">NORMAL</button>
+    <button data-spd="0.16">FAST</button>
+    <button data-spd="0.28">SPRINT</button>
+  </div>
+
+  <div class="label">FRAME BREAKDOWN (6 keyframes)</div>
+  <div class="framerow" id="framerow"></div>
+
+  <div class="note">
+    24×32 해상도로 자연스러운 달리기 사이클 시도.<br>
+    접힌 무릎, 팔 스윙, 몸통 기울기 표현이 목표.<br>
+    검수 후 피드백 주시면 프레임별로 다듬어 개선합니다.
+  </div>
+
+  <script>
+    // ===== Sprite definition — 36 wide x 32 tall (lady runner) =====
+    const COLORS = {
+      '.': null,
+      'o': '#1a1a1a',  // outline / shoes
+      'H': '#111111',  // black hair
+      'S': '#fdd6a8',  // skin
+      'W': '#2563eb',  // blue top
+      'G': '#0b1e4f',  // navy shorts
+      'g': '#0a1735',  // darker navy shoe detail
+    };
+
+    const SPRITE_W = 36;
+    const SPRITE_H = 32;
+
+    // 6-frame running cycle extracted from ladyb11.gif silhouette
+    const FRAMES = [
+      [
+        '...................oooo.............',
+        '.................ooHHHo.............',
+        '.................oHHHHo.............',
+        '.................oSSSSo..So.........',
+        '.................oSSSSo..So.........',
+        '..................SSSo...So.........',
+        '................oSSSSo...So.........',
+        '...............SSoSSSSo.So..........',
+        '..............SoooWWWWWoSo..........',
+        '.............So...oWWWoSo...........',
+        '.............So...oWWWoSo...........',
+        '.............So...oWWWoo............',
+        '............So....oWWWo.............',
+        '............So....oWWWo.............',
+        '..................oWWWo.............',
+        '..................oWWWo.............',
+        '..................GGGGGo............',
+        '.................oGGGGGGGo..........',
+        '................oGGGGGGGGGoo........',
+        '...............oGGGGGooGGGGGoo......',
+        '..............oGGGGoo..ooooGGGo.....',
+        '.............oGGGGo........oGGo.....',
+        '..........oooSSSoo..........oSo.....',
+        '.........oSSSSoo............oSo.....',
+        '....oooooSSooo..............oSo.....',
+        '...oSSSSooo.................oo......',
+        '..oSSooo....................oo......',
+        '..oSo.......................oo......',
+        '..oo........................oo......',
+        '............................ogo.....',
+        '............................oggooo..',
+        '............................oooooo..',
+      ],
+      [
+        '.................ooo................',
+        '................oHHHo...............',
+        '...............oHHHHHo..............',
+        '...............oSSSSo...............',
+        '...............oSSSSo...............',
+        '...............oSSSo................',
+        '..............oSSSo.................',
+        '.............oSSoSSo................',
+        '............oWoWWWWWo...............',
+        '............So.oWWWWWo....So........',
+        '............So.oWWWWWoooSSSSSo......',
+        '............So..oWWWWooooo..........',
+        '............So..oWWWo...............',
+        '.............So.oWWWo...............',
+        '............oSo.oWWWo...............',
+        '............oo..oWWWo...............',
+        '................GGGGG...............',
+        '................GGGGGG..............',
+        '...............oGGGGGGGoo...........',
+        '..............oGGGGGGGGGGoo.........',
+        '..............oGGGoooooGGGGo........',
+        '..............oGGo.....oooGGo.......',
+        '....o........oSSo.........oSo.......',
+        '..ooSo...ooooSSo..........oSSo......',
+        '.oSSSSoooSSSSSSo...........oSo......',
+        'oSSoooooooooSSo............oSo......',
+        'ooo.........oo..............oSo.....',
+        '............................oSo.....',
+        '.............................oSo....',
+        '..............................ogoooo',
+        '..............................oggoo.',
+        '..............................ooo...',
+      ],
+      [
+        '..................oooo..............',
+        '.................oHHHo..............',
+        '................oHHHHo..............',
+        '................oSSSSo..............',
+        '................oSSSo...............',
+        '.................oSSo...............',
+        '................oSSSo...............',
+        '...............oSSoSSo..............',
+        '...............oWoWWWWWo............',
+        '..............So.oWWWWSSSSSo........',
+        '..............So.oWWWWoooooo........',
+        '..............So.oWWWo..............',
+        '..............So.oWWWo..............',
+        '..............So.oWWWo..............',
+        '..............So.oWWWo..............',
+        '..............So.oWWWo..............',
+        '.................GGGGGG.............',
+        '.................GGGGGGo............',
+        '.................oGGGGGGo...........',
+        '.................oGGoooGGo..........',
+        '.................oGo...oGo..........',
+        '.................oGo...oGG..........',
+        '.........oo......oSo...oSo..........',
+        '.......ooSSooooooSSo...oSo..........',
+        '......oSSSSSSSSoSSo....oSo..........',
+        '......ooooooooo.oo.....oSo..........',
+        '........................oo..........',
+        '........................oo..........',
+        '........................oo..........',
+        '........................ogo.........',
+        '.......................ogggoo.......',
+        '........................ooooo.......',
+      ],
+      [
+        '................ooo.................',
+        '...............oHHHo................',
+        '...............oHHHH................',
+        '..............oSSSo.................',
+        '...............oSo..................',
+        '...............oSo..................',
+        '..............oSSSo.................',
+        '.............oSSoSo.................',
+        '.............oWWWWo.................',
+        '..............oWWWo.................',
+        '..............oWWWWooooo............',
+        '...............oWWo....o............',
+        '...............oWWo.................',
+        '...............oWWo.................',
+        '...............WWWo.................',
+        '...............GGGG.................',
+        '...............GGGGG................',
+        '...............oGGGGG...............',
+        '...............oGGGoGGo.............',
+        '.............oo.oGo.oGo.............',
+        '.............oGoGGGoGGG.............',
+        '.............oGoGGGooGo.............',
+        '............oSo.oSo.................',
+        '............oo.oSo..................',
+        '...............oo...................',
+        '..............oSo...................',
+        '..............oo....................',
+        '.............oSo....................',
+        '............oSo.....................',
+        '............ogo.....................',
+        '.............ogo....................',
+        '..............oo....................',
+      ],
+      [
+        '.................oooo...............',
+        '................oHHHo...............',
+        '................oHHHo...............',
+        '................oSSSo...............',
+        '.................SSo................',
+        '.................SSo................',
+        '...............oSSSSo...............',
+        '..............ooWWWo................',
+        '..............So.oWWo...............',
+        '.............So..oWWo...............',
+        '.............So..oWWo...............',
+        '.............So..oWWWSSSS...........',
+        '.............So..oWWWoooo...........',
+        '.............So.oWWWo...............',
+        '................oWWWo...............',
+        '................oGGGG...............',
+        '................oGGGGGGo............',
+        '................oGGGGGGGo...........',
+        '................oGGooooGGoo.........',
+        '................oGo....oGGo.........',
+        '................oGo..ooGGGo.........',
+        '................oGGooGGooo..........',
+        '................oSSSooo.............',
+        '..............ooSSSo................',
+        '.............oSSoSo.................',
+        '............oSoo.oo.................',
+        '..........ooSo....o.................',
+        '.........oSSo.......................',
+        '.........oSo........................',
+        '.........ogo........................',
+        '..........oo........................',
+        '..........oo........................',
+      ],
+      [
+        '..................oooo..............',
+        '.................oHHHo..............',
+        '.................oHHHo..............',
+        '................oSSSSo...So.........',
+        '.................oSSo....o..........',
+        '.................oSSo...So..........',
+        '...............ooSSSo...So..........',
+        '..............oSoSSoSo.So...........',
+        '..............oo.oWWWWoWo...........',
+        '..............oo.oWWWo..............',
+        '..............oo.oWWWo..............',
+        '...............o.oWWWo..............',
+        '..............oo..oWWo..............',
+        '..............oo..oWWo..............',
+        '.................oWWGGo.............',
+        '.................oGGGGGo............',
+        '.................oGGGGGGoo..........',
+        '................oGGGGGGGGGGo........',
+        '................oGGGo.oooGGGo.......',
+        '...............oGGGo.....oGGo.......',
+        '...............oGGo.....oGGo........',
+        '..............oGGo.....oGoo.........',
+        '............ooSSo......oo...........',
+        '...........oSSoo.....ooo............',
+        '..........oSSo......oSSo............',
+        '.........oSoo.......oSo.............',
+        '......oooSo..........oo.............',
+        '......oSSo...........oo.............',
+        '......oSo.............o.............',
+        '......ogo...........................',
+        '.......oo...........................',
+        '.......oo...........................',
+      ],
+    ];
+
+    function renderSprite(ctx, frameOrIdx, ox, oy, scale) {
+      const frame = (typeof frameOrIdx === 'number') ? FRAMES[frameOrIdx] : frameOrIdx;
+      for (let y = 0; y < SPRITE_H; y++) {
+        const row = frame[y];
+        for (let x = 0; x < SPRITE_W; x++) {
+          const c = row[x];
+          const col = COLORS[c];
+          if (col) {
+            ctx.fillStyle = col;
+            ctx.fillRect(ox + x * scale, oy + y * scale, scale, scale);
+          }
+        }
+      }
+    }
+
+    // ===== Main canvas =====
+    const main = document.getElementById('main');
+    const mctx = main.getContext('2d');
+    mctx.imageSmoothingEnabled = false;
+
+    let frameTimer = 0;
+    let curFrame = 0;
+    let speed = 0.08;
+    let runX = 0;
+
+    function drawTrack() {
+      mctx.fillStyle = '#ffffff';
+      mctx.fillRect(0, 0, 700, 320);
+    }
+
+    function loop() {
+      drawTrack();
+
+      frameTimer += speed;
+      if (frameTimer >= 1) {
+        frameTimer = 0;
+        curFrame = (curFrame + 1) % FRAMES.length;
+      }
+      runX += speed * 60;
+
+      // Draw runner at center, scale 5 => 120x160 px
+      const scale = 5;
+      const sx = 700 / 2 - SPRITE_W * scale / 2;
+      const sy = 300 - SPRITE_H * scale + 8;
+
+      // Shadow
+      mctx.fillStyle = 'rgba(0,0,0,0.4)';
+      mctx.beginPath();
+      mctx.ellipse(sx + SPRITE_W * scale / 2, 302, 40, 5, 0, 0, Math.PI * 2);
+      mctx.fill();
+
+      renderSprite(mctx, curFrame, sx, sy, scale);
+
+      // Label
+      mctx.fillStyle = '#666';
+      mctx.font = '10px "Press Start 2P"';
+      mctx.textAlign = 'left';
+      mctx.fillText('FRAME ' + curFrame + '  SPEED ' + speed.toFixed(2), 10, 18);
+
+      requestAnimationFrame(loop);
+    }
+    loop();
+
+    // Speed buttons
+    document.querySelectorAll('#speedControls button').forEach(b => {
+      b.addEventListener('click', () => {
+        speed = parseFloat(b.dataset.spd);
+        document.querySelectorAll('#speedControls button').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+      });
+    });
+
+    // Frame breakdown
+    const row = document.getElementById('framerow');
+    for (let i = 0; i < FRAMES.length; i++) {
+      const c = document.createElement('canvas');
+      c.width = SPRITE_W * 3;
+      c.height = SPRITE_H * 3;
+      const cx = c.getContext('2d');
+      cx.imageSmoothingEnabled = false;
+      cx.fillStyle = '#ffffff';
+      cx.fillRect(0, 0, c.width, c.height);
+      renderSprite(cx, i, 0, 0, 3);
+      row.appendChild(c);
+    }
+  </script>
+</body>
+
+</html>
