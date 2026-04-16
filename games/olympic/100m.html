@@ -23,7 +23,7 @@ canvas{background:#1a1a2e;image-rendering:pixelated;image-rendering:-moz-crisp-e
   <div class="tbtn" id="tR">D</div>
 </div>
 <script>
-// ===== Shared session schema (must match olympic.html) =====
+// ===== Shared session schema (must match index.html) =====
 const SESSION_KEY = 'olympicSession';
 const EVENT_ID = '100m';
 function loadSession(){ try{ return JSON.parse(localStorage.getItem(SESSION_KEY)||'null') || null; }catch(e){ return null; } }
@@ -426,10 +426,10 @@ window.addEventListener('keydown', e => {
   }
   else if(e.code === 'Enter'){
     if(state==='title') startCountdown();
-    else if(state==='final') location.href='olympic.html';
+    else if(state==='final') location.href='index.html';
     else if(state==='roundEnd') startNextRound();
   }
-  else if(e.code === 'Escape'){ location.href='olympic.html'; }
+  else if(e.code === 'Escape'){ location.href='index.html'; }
 });
 
 function addT(el, side){
@@ -444,14 +444,14 @@ canvas.addEventListener('touchstart', e => {
   if(state === 'roundEnd' && Date.now() - roundEndAt > 800){
     startNextRound();
   } else if(state === 'final' && Date.now() - roundEndAt > 800){
-    location.href = 'olympic.html';
+    location.href = 'index.html';
   }
 }, {passive:true});
 canvas.addEventListener('mousedown', e => {
   if(state === 'roundEnd' && Date.now() - roundEndAt > 800){
     startNextRound();
   } else if(state === 'final' && Date.now() - roundEndAt > 800){
-    location.href = 'olympic.html';
+    location.href = 'index.html';
   }
 });
 
