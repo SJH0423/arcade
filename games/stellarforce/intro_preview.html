@@ -14,7 +14,7 @@
 </style>
 </head>
 <body>
-<div class="hint">INTRO PREVIEW — 제국 함대의 지구 공격 → 폐허 기지 출격</div>
+<div class="hint">INTRO PREVIEW — 깐따삐야 함대의 지구 공격 → 폐허 기지 출격</div>
 <canvas id="game" width="640" height="480"></canvas>
 <div class="controls"><button id="btnReplay">REPLAY</button></div>
 <script>
@@ -240,7 +240,7 @@ function loop() {
     const a = Math.min(1, t / 60);
     drawEarth(a, 0, earthBefore);
     if (t > 60) drawImperialFleet(Math.min(1, (t - 60) / 180));
-    if (t > 30) subtitle('서기 2284년 — 제국 함대가 지구를 덮치다', Math.min(1, (t - 30) / 60), '#ddeeff', H - 40, '14px "Noto Sans KR", sans-serif');
+    if (t > 30) subtitle('서기 2284년 — 깐따삐야 함대가 지구를 덮치다', Math.min(1, (t - 30) / 60), '#ddeeff', H - 40, '14px "Noto Sans KR", sans-serif');
 
   } else if (t < 420) {
     const sceneT = t - 240;
