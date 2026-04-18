@@ -314,6 +314,38 @@
 
   <div class="game-grid">
 
+    <div class="game-card" data-href="games/stellarforce/">
+      <div class="thumb">
+        <canvas id="stellarforceThumb"></canvas>
+        <div class="play-overlay">
+          <div class="play-btn">
+            <svg viewBox="0 0 24 24">
+              <polygon points="5,3 19,12 5,21" />
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div class="card-info">
+        <h2>STELLAR FORCE</h2>
+        <p>Retro horizontal shooter. Charge your beam, dodge bullet storms, and defeat the final boss.</p>
+        <div class="card-tags">
+          <span class="tag pink">2D</span>
+          <span class="tag">Shooter</span>
+          <span class="tag amber">Keyboard</span>
+          <span class="vote-group" data-game="stellarforce">
+            <span class="vote-btn up" role="button" data-vote="up"><svg viewBox="0 0 24 24">
+                <path
+                  d="M7 22h2V10H7v12zm14-11c0-1.1-.9-2-2-2h-5.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 2 7.59 8.59C7.22 8.95 7 9.45 7 10v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1z" />
+              </svg><span class="vc-up">0</span></span>
+            <span class="vote-btn down" role="button" data-vote="down"><svg viewBox="0 0 24 24">
+                <path
+                  d="M15 2H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v1c0 1.1.9 2 2 2h5.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 21l6.59-6.59c.36-.36.58-.86.58-1.41V4c0-1.1-.9-2-2-2zm4 0v12h4V2h-4z" />
+              </svg><span class="vc-down">0</span></span>
+          </span>
+        </div>
+      </div>
+    </div>
+
     <div class="game-card" data-href="games/starwing/">
       <div class="thumb">
         <canvas id="starwingThumb"></canvas>
@@ -634,6 +666,116 @@
       window.addEventListener('resize', resize);
       resize();
       draw();
+    })();
+
+    // STELLAR FORCE thumbnail — horizontal shooter
+    (function () {
+      const c = document.getElementById('stellarforceThumb');
+      if (!c) return;
+      const ctx = c.getContext('2d');
+      c.width = 380; c.height = 237;
+      const W = 380, H = 237;
+
+      // Space background
+      ctx.fillStyle = '#050510';
+      ctx.fillRect(0, 0, W, H);
+
+      // Nebula
+      const grad = ctx.createRadialGradient(280, 100, 10, 280, 100, 120);
+      grad.addColorStop(0, 'rgba(40, 10, 80, 0.15)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+
+      // Stars
+      for (let i = 0; i < 60; i++) {
+        ctx.fillStyle = `rgba(255,255,255,${0.3 + Math.random() * 0.6})`;
+        ctx.fillRect(Math.random() * W, Math.random() * H, Math.random() < 0.3 ? 2 : 1, 1);
+      }
+
+      // Player ship (R-Type style)
+      const px = 80, py = H / 2 + 20;
+      ctx.fillStyle = '#4488ff';
+      ctx.fillRect(px - 14, py - 4, 28, 8);
+      ctx.fillStyle = '#66aaff';
+      ctx.fillRect(px + 14, py - 2, 6, 4);
+      ctx.fillRect(px + 20, py - 1, 3, 2);
+      ctx.fillStyle = '#aaddff';
+      ctx.fillRect(px + 4, py - 2, 6, 4);
+      ctx.fillStyle = '#3366cc';
+      ctx.fillRect(px - 10, py - 8, 16, 4);
+      ctx.fillRect(px - 10, py + 4, 16, 4);
+      ctx.fillStyle = '#5599ee';
+      ctx.fillRect(px - 14, py - 10, 6, 3);
+      ctx.fillRect(px - 14, py + 7, 6, 3);
+      ctx.fillStyle = '#ff6622';
+      ctx.fillRect(px - 18, py - 3, 4, 6);
+      ctx.fillStyle = '#ffaa44';
+      ctx.fillRect(px - 24, py - 2, 6, 4);
+
+      // Player bullets
+      ctx.fillStyle = '#44ddff';
+      ctx.fillRect(px + 25, py - 1, 12, 3);
+      ctx.fillRect(px + 45, py - 1, 12, 3);
+      ctx.fillRect(px + 65, py - 1, 12, 3);
+
+      // Charge ball
+      ctx.beginPath();
+      ctx.arc(px + 22, py, 8, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0, 200, 255, 0.5)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(px + 22, py, 5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(100, 230, 255, 0.7)';
+      ctx.fill();
+
+      // Grunt enemies
+      const grunts = [[260, 60], [290, 90], [310, 45], [260, 130], [290, 160]];
+      for (const [gx, gy] of grunts) {
+        ctx.fillStyle = '#ee4444';
+        ctx.fillRect(gx - 10, gy - 5, 20, 10);
+        ctx.fillStyle = '#ff6666';
+        ctx.fillRect(gx - 6, gy - 7, 8, 3);
+        ctx.fillRect(gx - 6, gy + 4, 8, 3);
+        ctx.fillStyle = '#ffaa00';
+        ctx.fillRect(gx + 10, gy - 2, 4, 4);
+      }
+
+      // Boss (right side, partially visible)
+      const bx = 330, by = H / 2 + 20;
+      ctx.fillStyle = '#881111';
+      ctx.fillRect(bx - 40, by - 30, 80, 60);
+      ctx.fillStyle = '#aa2222';
+      ctx.fillRect(bx - 45, by - 20, 12, 40);
+      ctx.fillRect(bx + 30, by - 16, 16, 32);
+      ctx.fillStyle = '#cc3333';
+      ctx.fillRect(bx - 22, by - 36, 32, 8);
+      ctx.fillRect(bx - 22, by + 28, 32, 8);
+      ctx.fillStyle = '#ff8800';
+      ctx.fillRect(bx - 45, by - 8, 6, 5);
+      ctx.fillRect(bx - 45, by + 3, 6, 5);
+      ctx.fillStyle = '#ff0000';
+      ctx.fillRect(bx + 8, by - 10, 16, 20);
+      ctx.fillStyle = '#ffff00';
+      ctx.fillRect(bx + 12, by - 6, 8, 12);
+
+      // Enemy bullets
+      const ebullets = [[200, 80], [180, 150], [220, 110], [170, 60]];
+      for (const [ex, ey] of ebullets) {
+        ctx.fillStyle = '#ff8800';
+        ctx.beginPath();
+        ctx.arc(ex, ey, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Explosion particles
+      const expColors = ['#ff4400', '#ff8800', '#ffcc00', '#ffffff'];
+      for (let i = 0; i < 12; i++) {
+        ctx.fillStyle = expColors[Math.floor(Math.random() * expColors.length)];
+        ctx.globalAlpha = 0.5 + Math.random() * 0.5;
+        ctx.fillRect(240 + Math.random() * 30, 40 + Math.random() * 20, 2 + Math.random() * 3, 2 + Math.random() * 3);
+      }
+      ctx.globalAlpha = 1;
     })();
 
     // Starwing thumbnail — matches actual game pixel sprites
