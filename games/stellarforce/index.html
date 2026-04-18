@@ -247,7 +247,7 @@ function drawIntro() {
     const a = Math.min(1, t / 60);
     introDrawEarth(a, 0, introEarthBefore);
     if (t > 60) introDrawFleet(Math.min(1, (t - 60) / 180));
-    if (t > 30) introSubtitle('서기 2284년 — 제국 함대가 지구를 덮치다', Math.min(1, (t - 30) / 60), '#ddeeff', H - 40, '14px "Noto Sans KR", sans-serif');
+    if (t > 30) introSubtitle('서기 2284년 — 깐따삐야 함대가 지구를 덮치다', Math.min(1, (t - 30) / 60), '#ddeeff', H - 40, '14px "Noto Sans KR", sans-serif');
 
   } else if (t < 420) {
     const sceneT = t - 240;
@@ -1430,7 +1430,7 @@ function render() {
 const ENDING_LINES = [
   '길고 긴 어둠의 시대가 막을 내렸다.',
   '',
-  '은하를 공포로 몰아넣던 제국의 기함,',
+  '은하를 공포로 몰아넣던 깐따삐야 제국의 기함,',
   'STELLAR 편대의 집념 앞에 침몰하다.',
   '',
   '흩어졌던 행성들은 다시 빛을 찾고,',
