@@ -5,17 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>STELLAR FORCE</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&family=Press+Start+2P&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#000;overflow:hidden;touch-action:none;font-family:'Press Start 2P',monospace;display:flex;justify-content:center;align-items:center;height:100vh}
 canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges}
+#wrap{position:relative}
+#gifLayer{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:hidden}
+#gifLayer img{position:absolute;left:83.75%;top:50%;transform:translate(-50%,-50%);width:55%;height:85%;transition:opacity 0.5s}
 #backBtn{position:fixed;top:12px;left:12px;z-index:200;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#94a3b8;font-size:10px;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:'Press Start 2P',monospace;text-decoration:none}
 #backBtn:hover{background:rgba(255,255,255,0.15);color:#fff}
 </style>
 </head>
 <body>
 <a id="backBtn" href="../../index.html">MENU</a>
+<div id="wrap">
 <canvas id="game"></canvas>
+<div id="gifLayer"></div>
+</div>
 
 <script>
 const canvas = document.getElementById('game');
@@ -52,8 +58,20 @@ function sfxDie() { snd(300, 0.4, 'sawtooth', 0.1); setTimeout(() => snd(150, 0.
 function sfxBoss() { snd(80, 0.3, 'square', 0.06); setTimeout(() => snd(60, 0.4, 'square', 0.05), 150); }
 
 // ========== GAME STATE ==========
-// States: 'title', 'ranking', 'playing', 'gameover', 'victory'
+// States: 'title', 'ranking', 'playing', 'gameover', 'ending', 'victory'
 let state = 'title';
+let endingT = 0;
+const gifLayer = document.getElementById('gifLayer');
+
+function showBossExplosionGif() {
+  const gif = document.createElement('img');
+  gif.src = 'assets/boss_explode.gif?t=' + Date.now();
+  gifLayer.appendChild(gif);
+  setTimeout(() => {
+    gif.style.opacity = '0';
+    setTimeout(() => gif.remove(), 500);
+  }, 1500);
+}
 let score = 0, hiScore = parseInt(localStorage.getItem('stellarforce_hi') || '0');
 let lives = 3, bombs = 3, weaponLevel = 0;
 let gameTime = 0;
@@ -168,7 +186,7 @@ initNebulae();
 function startGame() {
   state = 'playing';
   score = 0; lives = 3; bombs = 3; weaponLevel = 0;
-  gameTime = 0; bossActive = false; bossDefeated = false;
+  gameTime = 0; bossActive = false; bossDefeated = false; endingT = 0;
   charging = false; chargeAmount = 0;
   invincibleTimer = 120;
   player = { x: 80, y: H / 2, w: 32, h: 16 };
@@ -180,38 +198,40 @@ function startGame() {
 }
 
 // ========== PLAYER SHIP DRAWING ==========
-function drawPlayer(x, y) {
+function drawPlayer(x, y, s) {
+  s = s || 1;
+  const r = (v) => Math.round(v * s);
   const px = Math.round(x), py = Math.round(y);
   ctx.fillStyle = '#4488ff';
-  ctx.fillRect(px - 14, py - 4, 28, 8);
+  ctx.fillRect(px - r(14), py - r(4), r(28), r(8));
   ctx.fillStyle = '#66aaff';
-  ctx.fillRect(px + 14, py - 2, 6, 4);
-  ctx.fillRect(px + 20, py - 1, 3, 2);
+  ctx.fillRect(px + r(14), py - r(2), r(6), r(4));
+  ctx.fillRect(px + r(20), py - r(1), r(3), r(2));
   ctx.fillStyle = '#aaddff';
-  ctx.fillRect(px + 4, py - 2, 6, 4);
+  ctx.fillRect(px + r(4), py - r(2), r(6), r(4));
   ctx.fillStyle = '#3366cc';
-  ctx.fillRect(px - 10, py - 8, 16, 4);
-  ctx.fillRect(px - 10, py + 4, 16, 4);
+  ctx.fillRect(px - r(10), py - r(8), r(16), r(4));
+  ctx.fillRect(px - r(10), py + r(4), r(16), r(4));
   ctx.fillStyle = '#5599ee';
-  ctx.fillRect(px - 14, py - 10, 6, 3);
-  ctx.fillRect(px - 14, py + 7, 6, 3);
+  ctx.fillRect(px - r(14), py - r(10), r(6), r(3));
+  ctx.fillRect(px - r(14), py + r(7), r(6), r(3));
   ctx.fillStyle = invincibleTimer > 0 && Math.floor(invincibleTimer / 4) % 2 ? '#ffffff' : '#ff6622';
-  ctx.fillRect(px - 18, py - 3, 4, 6);
+  ctx.fillRect(px - r(18), py - r(3), r(4), r(6));
   ctx.fillStyle = '#ffaa44';
-  ctx.fillRect(px - 22, py - 2, 4, 4);
+  ctx.fillRect(px - r(22), py - r(2), r(4), r(4));
   if (Math.random() > 0.3) {
     ctx.fillStyle = '#ff4400';
-    ctx.fillRect(px - 24 - Math.random() * 6, py - 1, 3, 2);
+    ctx.fillRect(px - r(24) - Math.random() * r(6), py - r(1), r(3), r(2));
   }
   if (charging && chargeAmount > 10) {
-    const r = 4 + (chargeAmount / MAX_CHARGE) * 12;
+    const rad = 4 + (chargeAmount / MAX_CHARGE) * 12;
     const alpha = 0.3 + (chargeAmount / MAX_CHARGE) * 0.5;
     ctx.beginPath();
-    ctx.arc(px + 22, py, r, 0, Math.PI * 2);
+    ctx.arc(px + r(22), py, rad * s, 0, Math.PI * 2);
     ctx.fillStyle = `rgba(0, 200, 255, ${alpha})`;
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(px + 22, py, r * 0.6, 0, Math.PI * 2);
+    ctx.arc(px + r(22), py, rad * 0.6 * s, 0, Math.PI * 2);
     ctx.fillStyle = `rgba(100, 230, 255, ${alpha + 0.2})`;
     ctx.fill();
   }
@@ -596,6 +616,14 @@ function update() {
     if (Date.now() - attractStartT >= 3000) { attractStartT = Date.now(); state = 'title'; attract = true; }
   }
 
+  if (state === 'ending') {
+    endingT++;
+    if (endingT > 620) {
+      state = 'victory';
+      nameChars = ['A', 'A', 'A']; namePos = 0;
+    }
+  }
+
   if (state !== 'playing') return;
 
   gameTime++;
@@ -734,15 +762,18 @@ function update() {
     if (p.life <= 0) particles.splice(i, 1);
   }
 
-  // Victory check — go to name entry (same as gameover but with victory flag)
+  // Victory check — play ending cutscene, then go to name entry
   if (bossDefeated && enemies.length === 0 && particles.filter(p => p.type === 'dot').length < 5) {
     if (!player.bonusAdded) {
       score += lives * 10000;
       player.bonusAdded = true;
     }
-    state = 'victory';
-    nameChars = ['A', 'A', 'A']; namePos = 0;
-    if (score > hiScore) { hiScore = score; localStorage.setItem('stellarforce_hi', hiScore); }
+    if (state === 'playing') {
+      state = 'ending';
+      endingT = 0;
+      showBossExplosionGif();
+      if (score > hiScore) { hiScore = score; localStorage.setItem('stellarforce_hi', hiScore); }
+    }
   }
 }
 
@@ -1031,6 +1062,11 @@ function render() {
     drawNameEntry('GAME OVER', '#ff4444');
   }
 
+  // Ending cutscene (boss explosion → victory flythrough)
+  if (state === 'ending') {
+    drawEnding();
+  }
+
   // Victory — name entry
   if (state === 'victory') {
     ctx.fillStyle = 'rgba(0, 0, 20, 0.7)';
@@ -1039,6 +1075,69 @@ function render() {
   }
 
   ctx.restore();
+}
+
+const ENDING_LINES = [
+  '길고 긴 어둠의 시대가 막을 내렸다.',
+  '',
+  '은하를 공포로 몰아넣던 제국의 기함,',
+  'STELLAR 편대의 집념 앞에 침몰하다.',
+  '',
+  '흩어졌던 행성들은 다시 빛을 찾고,',
+  '우주는 오랜만에 고요한 평화를 맞이한다.',
+  '',
+  '모든 별은 당신의 이름을 기억할 것이다.',
+];
+
+function drawEnding() {
+  ctx.fillStyle = 'rgba(0, 0, 20, 0.55)';
+  ctx.fillRect(0, 0, W, H);
+
+  const tt = endingT - 90;
+  if (tt < 0) return;
+
+  const titleAlpha = Math.min(1, tt / 50);
+  ctx.globalAlpha = titleAlpha;
+  ctx.fillStyle = '#ffff88';
+  ctx.font = '36px "Press Start 2P"';
+  ctx.textAlign = 'center';
+  ctx.fillText('VICTORY!', W / 2, 90);
+  ctx.fillStyle = '#ffaa00';
+  ctx.font = '12px "Press Start 2P"';
+  ctx.fillText('MISSION COMPLETE', W / 2, 118);
+  ctx.globalAlpha = 1;
+
+  const shipAlpha = Math.max(0, Math.min(1, (tt - 40) / 40));
+  if (shipAlpha > 0) {
+    ctx.globalAlpha = shipAlpha;
+    const shipY = 210 + Math.sin(tt * 0.04) * 6;
+    drawPlayer(W / 2, shipY, 4);
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.textAlign = 'center';
+  ctx.font = '13px "Noto Sans KR", sans-serif';
+  const baseY = 310;
+  const lineH = 20;
+  const perLine = 30;
+  const startDelay = 100;
+  ENDING_LINES.forEach((ln, i) => {
+    const la = Math.max(0, Math.min(1, (tt - startDelay - i * perLine) / 28));
+    if (la <= 0) return;
+    ctx.globalAlpha = la;
+    ctx.fillStyle = '#ddeeff';
+    ctx.fillText(ln, W / 2, baseY + i * lineH);
+  });
+  ctx.globalAlpha = 1;
+
+  if (endingT > 540) {
+    const a = Math.floor(endingT / 20) % 2 ? 1 : 0.4;
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#ff88aa';
+    ctx.font = '10px "Press Start 2P"';
+    ctx.fillText('REGISTERING...', W / 2, H - 24);
+    ctx.globalAlpha = 1;
+  }
 }
 
 function drawHUD() {
