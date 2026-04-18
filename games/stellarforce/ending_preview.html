@@ -6,24 +6,114 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
 <style>
   html, body { margin:0; padding:0; background:#000; }
-  body { display:flex; align-items:center; justify-content:center; min-height:100vh; font-family:'Press Start 2P', monospace; }
+  body { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; font-family:'Press Start 2P', monospace; gap:14px; }
+  #stage { position:relative; width:640px; height:480px; }
   canvas { background:#000; display:block; image-rendering:pixelated; border: 2px solid #333; }
-  .hint { position:fixed; top:8px; left:12px; color:#666; font-size:11px; font-family:'Noto Sans KR', sans-serif; }
+  .controls { display:flex; gap:10px; }
+  .controls button {
+    background:#111; color:#ddeeff; border:1px solid #446; padding:8px 14px;
+    font-family:'Press Start 2P', monospace; font-size:10px; cursor:pointer; letter-spacing:1px;
+  }
+  .controls button.active { background:#2255aa; color:#fff; border-color:#88bbff; }
+  .controls button:hover { background:#1a3366; }
+  .hint { color:#666; font-size:11px; font-family:'Noto Sans KR', sans-serif; text-align:center; }
+  #gifLayer { position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; }
+  #gifLayer img { position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); width:360px; height:360px; }
 </style>
 </head>
 <body>
-<div class="hint">ENDING PREVIEW (프리뷰 단독 파일) — 새로고침 시 처음부터</div>
-<canvas id="game" width="640" height="480"></canvas>
+<div class="hint">ENDING PREVIEW — 방식 A(GIF) / 방식 B(Canvas) 비교</div>
+<div id="stage">
+  <canvas id="game" width="640" height="480"></canvas>
+  <div id="gifLayer"></div>
+</div>
+<div class="controls">
+  <button id="btnGif" class="active">REPLAY WITH GIF</button>
+  <button id="btnCanvas">REPLAY WITH CANVAS</button>
+</div>
 <script>
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 const W = canvas.width, H = canvas.height;
+const gifLayer = document.getElementById('gifLayer');
 
 const stars = [];
-for (let i = 0; i < 220; i++) {
-  stars.push({ x: Math.random() * W, y: Math.random() * H, z: Math.random() * 3 + 0.3 });
+for (let i = 0; i < 220; i++) stars.push({ x: Math.random()*W, y: Math.random()*H, z: Math.random()*3 + 0.3 });
+
+let mode = 'gif';
+let t = 0;
+let gifEl = null;
+let gifRemoveTimer = null;
+
+let particles = [];
+let shocks = [];
+let smokes = [];
+let flashT = 0;
+
+const BOSS_X = W/2, BOSS_Y = 200;
+const EXPLOSION_FRAMES = 90;
+
+function reset(newMode) {
+  mode = newMode;
+  t = 0;
+  particles = []; shocks = []; smokes = []; flashT = 0;
+  if (gifEl) { gifEl.remove(); gifEl = null; }
+  if (gifRemoveTimer) { clearTimeout(gifRemoveTimer); gifRemoveTimer = null; }
+
+  document.getElementById('btnGif').classList.toggle('active', mode === 'gif');
+  document.getElementById('btnCanvas').classList.toggle('active', mode === 'canvas');
+
+  if (mode === 'gif') {
+    gifEl = document.createElement('img');
+    gifEl.src = 'assets/boss_explode.gif?t=' + Date.now();
+    gifLayer.appendChild(gifEl);
+    gifRemoveTimer = setTimeout(() => {
+      if (gifEl) {
+        gifEl.style.transition = 'opacity 0.5s';
+        gifEl.style.opacity = '0';
+        setTimeout(() => { if (gifEl) { gifEl.remove(); gifEl = null; } }, 500);
+      }
+    }, 1500);
+  } else {
+    flashT = 12;
+    for (let i = 0; i < 60; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 2 + Math.random() * 8;
+      particles.push({
+        x: BOSS_X, y: BOSS_Y,
+        vx: Math.cos(a)*sp, vy: Math.sin(a)*sp,
+        life: 30 + Math.random()*40, maxLife: 70,
+        color: ['#ffffff','#fff4aa','#ffaa33','#ff5522','#cc2222'][Math.floor(Math.random()*5)],
+        size: 2 + Math.random()*4
+      });
+    }
+    for (let i = 0; i < 3; i++) shocks.push({ r: 0, maxR: 120 + i*40, delay: i*6, alpha: 0.9 });
+    for (let i = 0; i < 20; i++) {
+      smokes.push({
+        x: BOSS_X + (Math.random()-0.5)*40,
+        y: BOSS_Y + (Math.random()-0.5)*30,
+        vx: (Math.random()-0.5)*0.8,
+        vy: -0.3 - Math.random()*1.2,
+        life: 120 + Math.random()*60, maxLife: 180,
+        size: 18 + Math.random()*24
+      });
+    }
+    for (let i = 0; i < 30; i++) {
+      const a = Math.random()*Math.PI*2;
+      const sp = 6 + Math.random()*10;
+      particles.push({
+        x: BOSS_X, y: BOSS_Y,
+        vx: Math.cos(a)*sp, vy: Math.sin(a)*sp,
+        life: 40 + Math.random()*20, maxLife: 60,
+        color: '#ffee88', size: 1.5, spark: true
+      });
+    }
+  }
 }
+
+document.getElementById('btnGif').addEventListener('click', () => reset('gif'));
+document.getElementById('btnCanvas').addEventListener('click', () => reset('canvas'));
 
 function drawPlayer(x, y, s) {
   const r = (v) => Math.round(v * s);
@@ -47,7 +137,7 @@ function drawPlayer(x, y, s) {
   ctx.fillRect(px - r(22), py - r(2), r(4), r(4));
   if (Math.random() > 0.3) {
     ctx.fillStyle = '#ff4400';
-    ctx.fillRect(px - r(24) - Math.random() * r(6), py - r(1), r(3), r(2));
+    ctx.fillRect(px - r(24) - Math.random()*r(6), py - r(1), r(3), r(2));
   }
   ctx.fillStyle = '#ffee88';
   ctx.fillRect(px - r(26), py - r(1), r(2), r(2));
@@ -65,7 +155,56 @@ const lines = [
   '모든 별은 당신의 이름을 기억할 것이다.',
 ];
 
-let t = 0;
+function drawCanvasExplosion() {
+  if (flashT > 0) {
+    const fa = flashT / 12;
+    ctx.fillStyle = `rgba(255, 255, 255, ${fa * 0.6})`;
+    ctx.fillRect(0, 0, W, H);
+    flashT--;
+  }
+  for (let i = shocks.length - 1; i >= 0; i--) {
+    const s = shocks[i];
+    if (s.delay > 0) { s.delay--; continue; }
+    s.r += 4;
+    s.alpha -= 0.02;
+    if (s.alpha <= 0) { shocks.splice(i, 1); continue; }
+    ctx.strokeStyle = `rgba(255, 220, 120, ${s.alpha})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(BOSS_X, BOSS_Y, s.r, 0, Math.PI*2);
+    ctx.stroke();
+  }
+  for (let i = smokes.length - 1; i >= 0; i--) {
+    const sm = smokes[i];
+    sm.x += sm.vx; sm.y += sm.vy;
+    sm.life--;
+    if (sm.life <= 0) { smokes.splice(i, 1); continue; }
+    const a = Math.min(0.35, (sm.life / sm.maxLife) * 0.5);
+    const gradR = sm.size * (1 + (1 - sm.life/sm.maxLife) * 1.2);
+    const g = ctx.createRadialGradient(sm.x, sm.y, 0, sm.x, sm.y, gradR);
+    g.addColorStop(0, `rgba(120, 110, 105, ${a})`);
+    g.addColorStop(1, `rgba(30, 25, 25, 0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(sm.x, sm.y, gradR, 0, Math.PI*2);
+    ctx.fill();
+  }
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy;
+    p.vx *= 0.96; p.vy *= 0.96;
+    if (!p.spark) p.vy += 0.05;
+    p.life--;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    const la = p.life / p.maxLife;
+    ctx.globalAlpha = la;
+    ctx.fillStyle = p.color;
+    const sz = p.size * (0.6 + la * 0.4);
+    ctx.fillRect(p.x - sz/2, p.y - sz/2, sz, sz);
+  }
+  ctx.globalAlpha = 1;
+}
+
 function loop() {
   t++;
   ctx.fillStyle = '#000014';
@@ -73,53 +212,65 @@ function loop() {
 
   for (const s of stars) {
     s.x -= s.z;
-    if (s.x < 0) { s.x = W; s.y = Math.random() * H; }
+    if (s.x < 0) { s.x = W; s.y = Math.random()*H; }
     ctx.fillStyle = s.z > 2 ? '#ffffff' : s.z > 1 ? '#aaccff' : '#5566aa';
     const sz = Math.max(1, Math.floor(s.z));
     ctx.fillRect(s.x, s.y, sz, sz);
   }
 
-  const titleAlpha = Math.min(1, t / 60);
-  ctx.globalAlpha = titleAlpha;
-  ctx.fillStyle = '#ffff88';
-  ctx.font = '28px "Press Start 2P"';
-  ctx.textAlign = 'center';
-  ctx.fillText('VICTORY!', W / 2, 70);
-  ctx.fillStyle = '#ffaa00';
-  ctx.font = '10px "Press Start 2P"';
-  ctx.fillText('MISSION COMPLETE', W / 2, 95);
-  ctx.globalAlpha = 1;
+  if (mode === 'canvas') drawCanvasExplosion();
 
-  const shipY = 195 + Math.sin(t * 0.04) * 6;
-  drawPlayer(W / 2, shipY, 4);
+  const showShip = t > EXPLOSION_FRAMES;
+  if (showShip) {
+    const tt = t - EXPLOSION_FRAMES;
+    const shipAlpha = Math.min(1, tt / 30);
+    ctx.globalAlpha = shipAlpha;
 
-  ctx.textAlign = 'center';
-  ctx.font = '13px "Noto Sans KR", sans-serif';
-  const baseY = 310;
-  const lineH = 20;
-  const perLine = 45;
-  const startDelay = 80;
-  lines.forEach((ln, i) => {
-    const la = Math.max(0, Math.min(1, (t - startDelay - i * perLine) / 28));
-    if (la <= 0) return;
-    ctx.globalAlpha = la;
-    ctx.fillStyle = '#ddeeff';
-    ctx.fillText(ln, W / 2, baseY + i * lineH);
-  });
-  ctx.globalAlpha = 1;
-
-  const totalEnd = startDelay + lines.length * perLine + 30;
-  if (t > totalEnd) {
-    const ca = Math.min(1, (t - totalEnd) / 40);
-    ctx.globalAlpha = ca;
-    ctx.fillStyle = '#ff88aa';
+    const titleAlpha = Math.min(1, tt / 60);
+    ctx.globalAlpha = titleAlpha;
+    ctx.fillStyle = '#ffff88';
+    ctx.font = '28px "Press Start 2P"';
+    ctx.textAlign = 'center';
+    ctx.fillText('VICTORY!', W/2, 70);
+    ctx.fillStyle = '#ffaa00';
     ctx.font = '10px "Press Start 2P"';
-    ctx.fillText('- STELLAR FORCE -', W / 2, H - 22);
+    ctx.fillText('MISSION COMPLETE', W/2, 95);
+    ctx.globalAlpha = shipAlpha;
+
+    const shipY = 195 + Math.sin(tt * 0.04) * 6;
+    drawPlayer(W/2, shipY, 4);
     ctx.globalAlpha = 1;
+
+    ctx.textAlign = 'center';
+    ctx.font = '13px "Noto Sans KR", sans-serif';
+    const baseY = 310;
+    const lineH = 20;
+    const perLine = 45;
+    const startDelay = 50;
+    lines.forEach((ln, i) => {
+      const la = Math.max(0, Math.min(1, (tt - startDelay - i * perLine) / 28));
+      if (la <= 0) return;
+      ctx.globalAlpha = la;
+      ctx.fillStyle = '#ddeeff';
+      ctx.fillText(ln, W/2, baseY + i * lineH);
+    });
+    ctx.globalAlpha = 1;
+
+    const totalEnd = startDelay + lines.length * perLine + 30;
+    if (tt > totalEnd) {
+      const ca = Math.min(1, (tt - totalEnd) / 40);
+      ctx.globalAlpha = ca;
+      ctx.fillStyle = '#ff88aa';
+      ctx.font = '10px "Press Start 2P"';
+      ctx.fillText('- STELLAR FORCE -', W/2, H - 22);
+      ctx.globalAlpha = 1;
+    }
   }
 
   requestAnimationFrame(loop);
 }
+
+reset('gif');
 loop();
 </script>
 </body>
