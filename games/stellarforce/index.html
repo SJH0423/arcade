@@ -58,9 +58,11 @@ function sfxDie() { snd(300, 0.4, 'sawtooth', 0.1); setTimeout(() => snd(150, 0.
 function sfxBoss() { snd(80, 0.3, 'square', 0.06); setTimeout(() => snd(60, 0.4, 'square', 0.05), 150); }
 
 // ========== GAME STATE ==========
-// States: 'title', 'ranking', 'playing', 'gameover', 'ending', 'victory'
+// States: 'title', 'ranking', 'intro', 'playing', 'gameover', 'ending', 'victory'
 let state = 'title';
 let endingT = 0;
+let introT = 0;
+let introLasers = [], introDamageMarks = [], introSmokes = [], introTrail = [];
 const gifLayer = document.getElementById('gifLayer');
 
 function showBossExplosionGif() {
@@ -71,6 +73,333 @@ function showBossExplosionGif() {
     gif.style.opacity = '0';
     setTimeout(() => gif.remove(), 500);
   }, 1500);
+}
+
+// ========== INTRO CUTSCENE ==========
+const introEarthBefore = new Image();
+introEarthBefore.src = 'assets/earth_before.jpg';
+const introEarthAfter = new Image();
+introEarthAfter.src = 'assets/earth_after.jpg';
+const introEarth = { x: 800/2, y: 500/2 + 10, r: 80 };
+const introFleetShips = [
+  { ox: 0,   oy: -40, s: 1.2 },
+  { ox: -40, oy:  20, s: 1.0 },
+  { ox: 20,  oy:  60, s: 0.9 },
+  { ox: -20, oy: -80, s: 0.8 },
+  { ox: -60, oy: -10, s: 1.1 },
+];
+const introStars = [];
+for (let i = 0; i < 240; i++) introStars.push({ x: Math.random()*800, y: Math.random()*500, z: Math.random()*3 + 0.3 });
+
+function introDrawEarth(alpha, burnT, img) {
+  ctx.globalAlpha = alpha;
+  if (img && img.complete && img.naturalWidth > 0) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(introEarth.x, introEarth.y, introEarth.r, 0, Math.PI*2);
+    ctx.clip();
+    ctx.drawImage(img, introEarth.x - introEarth.r, introEarth.y - introEarth.r, introEarth.r*2, introEarth.r*2);
+    ctx.restore();
+  } else {
+    ctx.fillStyle = '#1144aa';
+    ctx.beginPath(); ctx.arc(introEarth.x, introEarth.y, introEarth.r, 0, Math.PI*2); ctx.fill();
+  }
+  if (burnT > 0) {
+    ctx.globalAlpha = alpha * Math.min(0.45, burnT / 200);
+    ctx.fillStyle = '#ff5522';
+    ctx.beginPath(); ctx.arc(introEarth.x, introEarth.y, introEarth.r, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function introDrawShip(x, y, s) {
+  const r = v => Math.round(v * s);
+  const px = Math.round(x), py = Math.round(y);
+  ctx.fillStyle = '#555566';
+  ctx.beginPath();
+  ctx.moveTo(px + r(20), py);
+  ctx.lineTo(px - r(15), py - r(8));
+  ctx.lineTo(px - r(15), py + r(8));
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#333344';
+  ctx.fillRect(px - r(18), py - r(4), r(6), r(8));
+  ctx.fillStyle = '#777788';
+  ctx.fillRect(px - r(5), py - r(11), r(10), r(4));
+  ctx.fillStyle = '#ff3344';
+  ctx.fillRect(px - r(20), py - r(2), r(3), r(4));
+}
+
+function introDrawFleet(progress) {
+  const baseX = W + 100 - progress * 210;
+  for (const s of introFleetShips) introDrawShip(baseX + s.ox, H/2 + s.oy, s.s);
+}
+
+function introDrawLaserBeam(fx, fy, tx, ty, color) {
+  ctx.save();
+  ctx.strokeStyle = color; ctx.lineWidth = 3;
+  ctx.shadowBlur = 20; ctx.shadowColor = color;
+  ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(tx, ty); ctx.stroke();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = '#ffffff';
+  ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(tx, ty); ctx.stroke();
+  ctx.restore();
+}
+
+function introDrawRuinedBase() {
+  const groundY = H - 80;
+  ctx.fillStyle = '#2a1a1a';
+  ctx.fillRect(0, groundY, W, 80);
+  ctx.fillStyle = '#15090a';
+  for (let i = 0; i < 50; i++) ctx.fillRect(i * 16 + (i%3)*4, groundY + 6 + (i%2)*3, 8, 5);
+
+  const towers = [
+    { x: 63,  h: 95,  w: 26, tilt: -0.18 },
+    { x: 163, h: 55,  w: 20, tilt: 0.10 },
+    { x: 275, h: 70,  w: 16, tilt: -0.05 },
+    { x: 550, h: 65,  w: 18, tilt: 0.06 },
+    { x: 638, h: 105, w: 30, tilt: 0.03 },
+    { x: 725, h: 45,  w: 16, tilt: -0.22 },
+  ];
+  for (const t of towers) {
+    ctx.save();
+    ctx.translate(t.x, groundY);
+    ctx.rotate(t.tilt);
+    ctx.fillStyle = '#4a3a3f';
+    ctx.fillRect(0, -t.h, t.w, t.h);
+    ctx.fillStyle = '#1a0f10';
+    ctx.fillRect(3, -t.h + 10, 4, 5);
+    ctx.fillRect(t.w - 7, -t.h + 26, 4, 5);
+    ctx.fillStyle = '#0a0406';
+    ctx.beginPath();
+    ctx.moveTo(0, -t.h);
+    ctx.lineTo(t.w * 0.4, -t.h - 8);
+    ctx.lineTo(t.w * 0.7, -t.h - 3);
+    ctx.lineTo(t.w, -t.h);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function introDrawLaunchPad(cx, groundY) {
+  for (const side of [-1, 1]) {
+    const tx = cx + side * 38;
+    ctx.fillStyle = '#5a5560';
+    ctx.fillRect(tx - 4, groundY - 170, 8, 170);
+    ctx.fillStyle = '#3a3540';
+    for (let y = groundY - 160; y < groundY - 5; y += 18) ctx.fillRect(tx - 4, y, 8, 2);
+  }
+  ctx.strokeStyle = '#4a4650';
+  ctx.lineWidth = 1;
+  for (let y = groundY - 160; y < groundY - 10; y += 22) {
+    ctx.beginPath();
+    ctx.moveTo(cx - 38, y); ctx.lineTo(cx + 38, y + 11);
+    ctx.moveTo(cx + 38, y); ctx.lineTo(cx - 38, y + 11);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#6a6068';
+  ctx.fillRect(cx - 32, groundY - 95, 14, 3);
+  ctx.fillRect(cx + 18, groundY - 95, 14, 3);
+  ctx.fillRect(cx - 32, groundY - 55, 14, 3);
+  ctx.fillRect(cx + 18, groundY - 55, 14, 3);
+  ctx.fillStyle = '#2a2228';
+  ctx.fillRect(cx - 55, groundY - 10, 110, 10);
+  ctx.fillStyle = '#ff6644';
+  ctx.fillRect(cx - 50, groundY - 8, 100, 2);
+  ctx.fillStyle = '#22191c';
+  ctx.fillRect(cx - 20, groundY - 20, 40, 12);
+}
+
+function drawPlayerRocket(x, y, s) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(-Math.PI / 2);
+  drawPlayer(0, 0, s);
+  ctx.restore();
+}
+
+function introSubtitle(text, alpha, color, y, font) {
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  ctx.font = font;
+  ctx.textAlign = 'center';
+  ctx.fillText(text, W/2, y);
+  ctx.globalAlpha = 1;
+}
+
+function drawIntroStars(speed) {
+  for (const s of introStars) {
+    s.x -= s.z * speed;
+    if (s.x < 0) { s.x = W; s.y = Math.random()*H; }
+    ctx.fillStyle = s.z > 2 ? '#ffffff' : s.z > 1 ? '#aaccff' : '#5566aa';
+    const sz = Math.max(1, Math.floor(s.z));
+    ctx.fillRect(s.x, s.y, sz, sz);
+  }
+}
+
+function drawIntro() {
+  ctx.fillStyle = '#000014';
+  ctx.fillRect(0, 0, W, H);
+
+  const t = introT;
+  if (t < 660) drawIntroStars(0.4);
+
+  if (t < 240) {
+    const a = Math.min(1, t / 60);
+    introDrawEarth(a, 0, introEarthBefore);
+    if (t > 60) introDrawFleet(Math.min(1, (t - 60) / 180));
+    if (t > 30) introSubtitle('서기 2284년 — 제국 함대가 지구를 덮치다', Math.min(1, (t - 30) / 60), '#ddeeff', H - 40, '14px "Noto Sans KR", sans-serif');
+
+  } else if (t < 420) {
+    const sceneT = t - 240;
+    introDrawEarth(1, sceneT, introEarthBefore);
+    introDrawFleet(1);
+
+    if (sceneT % 10 === 0) {
+      const si = Math.floor(Math.random() * introFleetShips.length);
+      const sh = introFleetShips[si];
+      const fx = W + 100 - 210 + sh.ox - 20;
+      const fy = H/2 + sh.oy;
+      const ang = Math.random() * Math.PI * 2;
+      const rr = Math.random() * introEarth.r * 0.9;
+      const tx = introEarth.x + Math.cos(ang) * rr;
+      const ty = introEarth.y + Math.sin(ang) * rr;
+      introLasers.push({ fx, fy, tx, ty, life: 8 });
+      introDamageMarks.push({ x: tx, y: ty, life: 260, maxLife: 260, size: 2 + Math.random()*3 });
+    }
+
+    for (let i = introLasers.length - 1; i >= 0; i--) {
+      const l = introLasers[i];
+      if (Math.random() > 0.3) introDrawLaserBeam(l.fx, l.fy, l.tx, l.ty, '#ff3366');
+      l.life--;
+      if (l.life <= 0) introLasers.splice(i, 1);
+    }
+
+    for (const d of introDamageMarks) {
+      const la = d.life / d.maxLife;
+      ctx.globalAlpha = 0.6 + la * 0.4;
+      ctx.fillStyle = la > 0.6 ? '#ffee88' : la > 0.3 ? '#ff7722' : '#552211';
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, d.size * (1 + (1-la)*0.8), 0, Math.PI*2);
+      ctx.fill();
+      d.life--;
+    }
+    ctx.globalAlpha = 1;
+
+    introSubtitle('지구는 불바다로 변했다', Math.min(1, sceneT / 30), '#ff8888', H - 40, '14px "Noto Sans KR", sans-serif');
+
+  } else if (t < 450) {
+    const sceneT = t - 420;
+    if (sceneT < 10) {
+      ctx.fillStyle = `rgba(255,220,180,${0.9 - sceneT/10 * 0.9})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    const cp = Math.min(1, sceneT / 30);
+    introDrawEarth(1 - cp, 240, introEarthBefore);
+    introDrawEarth(cp, 0, introEarthAfter);
+
+  } else if (t < 600) {
+    const sceneT = t - 450;
+    introDrawEarth(1, 0, introEarthAfter);
+    introSubtitle('잿빛 행성 — 푸른 별은 더 이상 없다', Math.min(1, sceneT / 40), '#ff9999', H - 40, '14px "Noto Sans KR", sans-serif');
+
+  } else if (t < 660) {
+    const sceneT = t - 600;
+    introDrawEarth(Math.max(0, 1 - sceneT / 40), 0, introEarthAfter);
+    ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(1, sceneT / 40)})`;
+    ctx.fillRect(0, 0, W, H);
+
+  } else {
+    const sceneT = t - 660;
+    const sg = ctx.createLinearGradient(0, 0, 0, H - 80);
+    sg.addColorStop(0, '#1a0a1a');
+    sg.addColorStop(0.6, '#2a1020');
+    sg.addColorStop(1, '#3a1a20');
+    ctx.fillStyle = sg;
+    ctx.fillRect(0, 0, W, H - 80);
+
+    introDrawRuinedBase();
+    introDrawLaunchPad(W/2, H - 80);
+
+    if (sceneT % 4 === 0) {
+      [ { x: 78, y: H - 175 }, { x: 650, y: H - 185 }, { x: 163, y: H - 135 } ].forEach(src => {
+        introSmokes.push({ x: src.x + (Math.random()-0.5)*14, y: src.y, vx: (Math.random()-0.5)*0.5, vy: -0.7 - Math.random()*0.6, life: 150, maxLife: 150, size: 12 + Math.random()*18 });
+      });
+    }
+    for (let i = introSmokes.length - 1; i >= 0; i--) {
+      const sm = introSmokes[i];
+      sm.x += sm.vx; sm.y += sm.vy;
+      sm.life--;
+      if (sm.life <= 0) { introSmokes.splice(i, 1); continue; }
+      const a = Math.min(0.4, sm.life / sm.maxLife * 0.55);
+      const g = ctx.createRadialGradient(sm.x, sm.y, 0, sm.x, sm.y, sm.size);
+      g.addColorStop(0, `rgba(130,120,115,${a})`);
+      g.addColorStop(1, 'rgba(30,25,25,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(sm.x, sm.y, sm.size, 0, Math.PI*2); ctx.fill();
+    }
+
+    const shipS = 1.8;
+    const baseRocketY = H - 200;
+    let rocketY = baseRocketY;
+    let ignited = false;
+    if (sceneT >= 80) {
+      const lt = sceneT - 80;
+      rocketY = baseRocketY - lt * 2.4;
+      ignited = true;
+    } else if (sceneT >= 60) {
+      rocketY = baseRocketY + (Math.random() - 0.5) * 2;
+    }
+
+    if (sceneT >= 60) {
+      const intensity = ignited ? 1 : 0.35;
+      const fb = rocketY + 24 * shipS;
+      ctx.fillStyle = '#ffee88';
+      ctx.beginPath(); ctx.ellipse(W/2, fb + 6 * intensity, 10 * shipS * intensity, 16 * shipS * intensity, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#ff6622';
+      ctx.beginPath(); ctx.ellipse(W/2, fb + 20 * intensity, 8 * shipS * intensity, 28 * shipS * intensity, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#aa2200';
+      ctx.beginPath(); ctx.ellipse(W/2, fb + 38 * intensity, 6 * shipS * intensity, 42 * shipS * intensity, 0, 0, Math.PI*2); ctx.fill();
+      if (ignited && sceneT % 2 === 0) {
+        introTrail.push({ x: W/2 + (Math.random()-0.5)*30, y: fb + 50 + Math.random()*30, life: 50, maxLife: 50, size: 10 + Math.random()*12 });
+      }
+    }
+    for (let i = introTrail.length - 1; i >= 0; i--) {
+      const p = introTrail[i];
+      p.life--;
+      p.y += 0.4;
+      if (p.life <= 0) { introTrail.splice(i, 1); continue; }
+      const la = p.life / p.maxLife;
+      ctx.globalAlpha = la * 0.5;
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size);
+      g.addColorStop(0, '#aa8866');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    drawPlayerRocket(W/2, rocketY, shipS);
+
+    introSubtitle('폐허가 된 기지, 마지막 희망이 출격한다', Math.min(1, sceneT / 40), '#ddeeff', 42, '14px "Noto Sans KR", sans-serif');
+    if (sceneT > 40) {
+      ctx.globalAlpha = Math.min(1, (sceneT - 40) / 40);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ff3344';
+      ctx.font = 'bold 16px "Noto Sans KR", sans-serif';
+      ctx.fillText('개빡친!', W/2, 66);
+      ctx.fillStyle = '#ffcc44';
+      ctx.font = '16px "Press Start 2P"';
+      ctx.fillText('STELLAR FORCE', W/2, 90);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  ctx.globalAlpha = 0.7;
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#aabbcc';
+  ctx.font = '10px "Press Start 2P"';
+  ctx.fillText('SKIP [S]', W - 16, H - 14);
+  ctx.globalAlpha = 1;
 }
 let score = 0, hiScore = parseInt(localStorage.getItem('stellarforce_hi') || '0');
 let lives = 3, bombs = 3, weaponLevel = 0;
@@ -103,6 +432,8 @@ document.addEventListener('keydown', e => {
       startGame();
       attract = false;
     }
+  } else if (state === 'intro') {
+    if (e.key.toLowerCase() === 's') startPlaying();
   } else if (state === 'gameover') {
     // Name entry controls
     if (e.code === 'ArrowLeft') { namePos = Math.max(0, namePos - 1); snd(800, 0.05, 'square', 0.03); }
@@ -184,6 +515,12 @@ function initNebulae() {
 initNebulae();
 
 function startGame() {
+  state = 'intro';
+  introT = 0;
+  introLasers = []; introDamageMarks = []; introSmokes = []; introTrail = [];
+}
+
+function startPlaying() {
   state = 'playing';
   score = 0; lives = 3; bombs = 3; weaponLevel = 0;
   gameTime = 0; bossActive = false; bossDefeated = false; endingT = 0;
@@ -253,7 +590,7 @@ function spawnEnemy(type, x, y, extra) {
       e.w = 60; e.h = 45; e.hp = e.maxHp = 40 + midBossCount * 15; e.vx = -1; e.targetX = W - 100;
       e.score = 3000; e.shootTimer = 0; break;
     case 'boss':
-      e.w = 100; e.h = 80; e.hp = e.maxHp = 120; e.vx = -0.5; e.targetX = W - 130;
+      e.w = 100; e.h = 80; e.hp = e.maxHp = 200; e.vx = -0.5; e.targetX = W - 130;
       e.score = 50000; e.shootTimer = 0; e.phase = 0; break;
   }
   enemies.push(e);
@@ -618,10 +955,16 @@ function update() {
 
   if (state === 'ending') {
     endingT++;
-    if (endingT > 620) {
+    if (endingT > 720) {
       state = 'victory';
       nameChars = ['A', 'A', 'A']; namePos = 0;
     }
+  }
+
+  if (state === 'intro') {
+    introT++;
+    if (introT >= 960) startPlaying();
+    return;
   }
 
   if (state !== 'playing') return;
@@ -705,6 +1048,7 @@ function update() {
       spawnExplosion(e.x, e.y, e.type === 'boss' ? 40 : e.type === 'midboss' ? 20 : 10);
       if (e.type === 'boss') {
         bossDefeated = true; bossActive = false; screenShake = 30;
+        showBossExplosionGif();
         for (let j = 0; j < 8; j++) {
           setTimeout(() => { spawnExplosion(e.x + (Math.random() - 0.5) * 80, e.y + (Math.random() - 0.5) * 60, 15); sfxExplode(); }, j * 200);
         }
@@ -771,7 +1115,6 @@ function update() {
     if (state === 'playing') {
       state = 'ending';
       endingT = 0;
-      showBossExplosionGif();
       if (score > hiScore) { hiScore = score; localStorage.setItem('stellarforce_hi', hiScore); }
     }
   }
@@ -780,6 +1123,7 @@ function update() {
 function playerHit() {
   sfxDie();
   lives--;
+  bombs = 3;
   invincibleTimer = 180;
   weaponLevel = Math.max(0, weaponLevel - 1);
   spawnExplosion(player.x, player.y, 15);
@@ -984,6 +1328,12 @@ function render() {
   ctx.save();
   if (screenShake > 0) ctx.translate((Math.random() - 0.5) * screenShake, (Math.random() - 0.5) * screenShake);
 
+  if (state === 'intro') {
+    drawIntro();
+    ctx.restore();
+    return;
+  }
+
   drawBackground();
 
   if (state === 'title') {
@@ -1096,16 +1446,36 @@ function drawEnding() {
   const tt = endingT - 90;
   if (tt < 0) return;
 
-  const titleAlpha = Math.min(1, tt / 50);
-  ctx.globalAlpha = titleAlpha;
-  ctx.fillStyle = '#ffff88';
-  ctx.font = '36px "Press Start 2P"';
-  ctx.textAlign = 'center';
-  ctx.fillText('VICTORY!', W / 2, 90);
-  ctx.fillStyle = '#ffaa00';
-  ctx.font = '12px "Press Start 2P"';
-  ctx.fillText('MISSION COMPLETE', W / 2, 118);
-  ctx.globalAlpha = 1;
+  const swapStart = 428;
+  const swapDur = 30;
+  let victoryAlpha = Math.min(1, tt / 50);
+  let logoAlpha = 0;
+  if (tt > swapStart) {
+    const p = Math.min(1, (tt - swapStart) / swapDur);
+    victoryAlpha = Math.max(0, 1 - p);
+    logoAlpha = p;
+  }
+  if (victoryAlpha > 0) {
+    ctx.globalAlpha = victoryAlpha;
+    ctx.fillStyle = '#ffff88';
+    ctx.font = '36px "Press Start 2P"';
+    ctx.textAlign = 'center';
+    ctx.fillText('VICTORY!', W / 2, 90);
+    ctx.fillStyle = '#ffaa00';
+    ctx.font = '12px "Press Start 2P"';
+    ctx.fillText('MISSION COMPLETE', W / 2, 118);
+    ctx.globalAlpha = 1;
+  }
+  if (logoAlpha > 0) {
+    ctx.globalAlpha = logoAlpha;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#4488ff';
+    ctx.font = '44px "Press Start 2P"';
+    ctx.fillText('STELLAR', W / 2, 80);
+    ctx.fillStyle = '#ff4444';
+    ctx.fillText('FORCE', W / 2, 130);
+    ctx.globalAlpha = 1;
+  }
 
   const shipAlpha = Math.max(0, Math.min(1, (tt - 40) / 40));
   if (shipAlpha > 0) {
