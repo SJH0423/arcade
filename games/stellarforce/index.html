@@ -233,7 +233,7 @@ function spawnEnemy(type, x, y, extra) {
       e.w = 60; e.h = 45; e.hp = e.maxHp = 40 + midBossCount * 15; e.vx = -1; e.targetX = W - 100;
       e.score = 3000; e.shootTimer = 0; break;
     case 'boss':
-      e.w = 100; e.h = 80; e.hp = e.maxHp = 200; e.vx = -0.5; e.targetX = W - 130;
+      e.w = 100; e.h = 80; e.hp = e.maxHp = 120; e.vx = -0.5; e.targetX = W - 130;
       e.score = 50000; e.shootTimer = 0; e.phase = 0; break;
   }
   enemies.push(e);
@@ -359,7 +359,7 @@ function fireChargeShot() {
   const size = 6 + power * 20;
   const dmg = Math.floor(2 + power * 18);
   sfxChargeShot();
-  bullets.push({ x: px, y: py, vx: 5 + power * 3, vy: 0, w: size * 2, h: size, dmg, type: 'charge', piercing: true, life: 120 });
+  bullets.push({ x: px, y: py, vx: 5 + power * 3, vy: 0, w: size * 2, h: size, dmg, type: 'charge', piercing: true, life: 120, hitTargets: [] });
   charging = false; chargeAmount = 0;
 }
 
@@ -658,11 +658,12 @@ function update() {
     for (let ei = enemies.length - 1; ei >= 0; ei--) {
       const e = enemies[ei];
       if (rectsOverlap(b, e)) {
+        if (b.hitTargets && b.hitTargets.indexOf(e) !== -1) continue;
         e.hp -= b.dmg;
         sfxHit();
         spawnParticles(b.x, b.y, 3, '#ffaa00');
         if (!b.piercing) { bullets.splice(bi, 1); break; }
-        else { b.dmg = Math.max(1, b.dmg - 1); }
+        else if (b.hitTargets) { b.hitTargets.push(e); }
       }
     }
   }
