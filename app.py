@@ -53,6 +53,10 @@ def init_db():
     ''')
     conn.execute('CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)')
 
+    existing_cols = {row[1] for row in conn.execute('PRAGMA table_info(rankings)').fetchall()}
+    if 'time' not in existing_cols:
+        conn.execute('ALTER TABLE rankings ADD COLUMN time TEXT')
+
     conn.commit()
     conn.close()
 
@@ -78,7 +82,7 @@ def get_ranking(game):
     limit = request.args.get('limit', 10, type=int)
     conn = get_db()
     rows = conn.execute(
-        'SELECT name, score, level, created_at FROM rankings WHERE game=? ORDER BY score DESC LIMIT ?',
+        'SELECT name, score, level, time, created_at FROM rankings WHERE game=? ORDER BY score DESC LIMIT ?',
         (game, limit)
     ).fetchall()
     conn.close()
@@ -94,17 +98,19 @@ def add_ranking(game):
     name = str(data['name'])[:3].upper()
     score = int(data['score'])
     level = int(data.get('level', 1))
+    time_value = data.get('time')
+    time_str = str(time_value)[:16] if time_value is not None else None
 
     conn = get_db()
     conn.execute(
-        'INSERT INTO rankings (game, name, score, level) VALUES (?, ?, ?, ?)',
-        (game, name, score, level)
+        'INSERT INTO rankings (game, name, score, level, time) VALUES (?, ?, ?, ?, ?)',
+        (game, name, score, level, time_str)
     )
     conn.commit()
 
     # Return updated top 10
     rows = conn.execute(
-        'SELECT name, score, level, created_at FROM rankings WHERE game=? ORDER BY score DESC LIMIT 10',
+        'SELECT name, score, level, time, created_at FROM rankings WHERE game=? ORDER BY score DESC LIMIT 10',
         (game,)
     ).fetchall()
     conn.close()
