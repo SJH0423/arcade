@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>STELLAR FORCE - ENDING PREVIEW</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; padding:0; background:#000; }
+  body { display:flex; align-items:center; justify-content:center; min-height:100vh; font-family:'Press Start 2P', monospace; }
+  canvas { background:#000; display:block; image-rendering:pixelated; border: 2px solid #333; }
+  .hint { position:fixed; top:8px; left:12px; color:#666; font-size:11px; font-family:'Noto Sans KR', sans-serif; }
+</style>
+</head>
+<body>
+<div class="hint">ENDING PREVIEW (프리뷰 단독 파일) — 새로고침 시 처음부터</div>
+<canvas id="game" width="640" height="480"></canvas>
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+const W = canvas.width, H = canvas.height;
+
+const stars = [];
+for (let i = 0; i < 220; i++) {
+  stars.push({ x: Math.random() * W, y: Math.random() * H, z: Math.random() * 3 + 0.3 });
+}
+
+function drawPlayer(x, y, s) {
+  const r = (v) => Math.round(v * s);
+  const px = Math.round(x), py = Math.round(y);
+  ctx.fillStyle = '#4488ff';
+  ctx.fillRect(px - r(14), py - r(4), r(28), r(8));
+  ctx.fillStyle = '#66aaff';
+  ctx.fillRect(px + r(14), py - r(2), r(6), r(4));
+  ctx.fillRect(px + r(20), py - r(1), r(3), r(2));
+  ctx.fillStyle = '#aaddff';
+  ctx.fillRect(px + r(4), py - r(2), r(6), r(4));
+  ctx.fillStyle = '#3366cc';
+  ctx.fillRect(px - r(10), py - r(8), r(16), r(4));
+  ctx.fillRect(px - r(10), py + r(4), r(16), r(4));
+  ctx.fillStyle = '#5599ee';
+  ctx.fillRect(px - r(14), py - r(10), r(6), r(3));
+  ctx.fillRect(px - r(14), py + r(7), r(6), r(3));
+  ctx.fillStyle = '#ff6622';
+  ctx.fillRect(px - r(18), py - r(3), r(4), r(6));
+  ctx.fillStyle = '#ffaa44';
+  ctx.fillRect(px - r(22), py - r(2), r(4), r(4));
+  if (Math.random() > 0.3) {
+    ctx.fillStyle = '#ff4400';
+    ctx.fillRect(px - r(24) - Math.random() * r(6), py - r(1), r(3), r(2));
+  }
+  ctx.fillStyle = '#ffee88';
+  ctx.fillRect(px - r(26), py - r(1), r(2), r(2));
+}
+
+const lines = [
+  '길고 긴 어둠의 시대가 막을 내렸다.',
+  '',
+  '은하를 공포로 몰아넣던 제국의 기함,',
+  'STELLAR 편대의 집념 앞에 침몰하다.',
+  '',
+  '흩어졌던 행성들은 다시 빛을 찾고,',
+  '우주는 오랜만에 고요한 평화를 맞이한다.',
+  '',
+  '모든 별은 당신의 이름을 기억할 것이다.',
+];
+
+let t = 0;
+function loop() {
+  t++;
+  ctx.fillStyle = '#000014';
+  ctx.fillRect(0, 0, W, H);
+
+  for (const s of stars) {
+    s.x -= s.z;
+    if (s.x < 0) { s.x = W; s.y = Math.random() * H; }
+    ctx.fillStyle = s.z > 2 ? '#ffffff' : s.z > 1 ? '#aaccff' : '#5566aa';
+    const sz = Math.max(1, Math.floor(s.z));
+    ctx.fillRect(s.x, s.y, sz, sz);
+  }
+
+  const titleAlpha = Math.min(1, t / 60);
+  ctx.globalAlpha = titleAlpha;
+  ctx.fillStyle = '#ffff88';
+  ctx.font = '28px "Press Start 2P"';
+  ctx.textAlign = 'center';
+  ctx.fillText('VICTORY!', W / 2, 70);
+  ctx.fillStyle = '#ffaa00';
+  ctx.font = '10px "Press Start 2P"';
+  ctx.fillText('MISSION COMPLETE', W / 2, 95);
+  ctx.globalAlpha = 1;
+
+  const shipY = 195 + Math.sin(t * 0.04) * 6;
+  drawPlayer(W / 2, shipY, 4);
+
+  ctx.textAlign = 'center';
+  ctx.font = '13px "Noto Sans KR", sans-serif';
+  const baseY = 310;
+  const lineH = 20;
+  const perLine = 45;
+  const startDelay = 80;
+  lines.forEach((ln, i) => {
+    const la = Math.max(0, Math.min(1, (t - startDelay - i * perLine) / 28));
+    if (la <= 0) return;
+    ctx.globalAlpha = la;
+    ctx.fillStyle = '#ddeeff';
+    ctx.fillText(ln, W / 2, baseY + i * lineH);
+  });
+  ctx.globalAlpha = 1;
+
+  const totalEnd = startDelay + lines.length * perLine + 30;
+  if (t > totalEnd) {
+    const ca = Math.min(1, (t - totalEnd) / 40);
+    ctx.globalAlpha = ca;
+    ctx.fillStyle = '#ff88aa';
+    ctx.font = '10px "Press Start 2P"';
+    ctx.fillText('- STELLAR FORCE -', W / 2, H - 22);
+    ctx.globalAlpha = 1;
+  }
+
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
