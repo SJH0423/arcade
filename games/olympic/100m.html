@@ -317,6 +317,7 @@ let countdownStart = 0;
 let frameTimer = 0;
 let curFrame = 0;
 let flashTimer = 0;
+let lastTime = 0;      // for deltaTime normalization
 let result = null;     // current round result {time, pts, dq, won, aiTime}
 
 // Round system
@@ -359,6 +360,7 @@ function reset(){
 function startCountdown(){
   state='countdown';
   countdownStart = Date.now();
+  lastTime = 0;
   AC.resume();
 }
 function startRace(){
@@ -366,6 +368,7 @@ function startRace(){
   speed=0; dist=0; elapsed=0;
   ai.dist=0; ai.frame=0; ai.frameTimer=0; ai.finished=false; ai.finishTime=0; ai.finishedAtMs=0;
   lastKey=null;
+  lastTime = 0;
   snd(800, 0.15, 'square', 0.12);
 }
 function startNextRound(){
@@ -944,15 +947,19 @@ function drawFinal(){
   ctx.fillText('PRESS ENTER FOR STADIUM', cx, 336);
 }
 
-function loop(){
+function loop(timestamp){
+  // deltaTime normalized to 60fps: dt=1.0 at 60fps, capped at 3
+  const dt = lastTime ? Math.min((timestamp - lastTime) / (1000/60), 3) : 1;
+  lastTime = timestamp;
+
   if(state === 'racing'){
-    elapsed++;
-    speed = Math.max(0, speed - DECAY);
-    dist += speed * METERS_PER_SPEED;
-    flashTimer = Math.max(0, flashTimer - 1);
+    elapsed += dt;
+    speed = Math.max(0, speed - DECAY * dt);
+    dist += speed * METERS_PER_SPEED * dt;
+    flashTimer = Math.max(0, flashTimer - dt);
 
     // Player frame anim
-    frameTimer += speed * 0.018;
+    frameTimer += speed * 0.018 * dt;
     if(frameTimer >= 1){
       frameTimer = 0;
       curFrame = (curFrame + 1) % FRAMES.length;
@@ -960,8 +967,8 @@ function loop(){
 
     // AI advance (constant pace, varies per round)
     if(!ai.finished){
-      ai.dist += aiMetersPerFrame;
-      ai.frameTimer += 0.16;
+      ai.dist += aiMetersPerFrame * dt;
+      ai.frameTimer += 0.16 * dt;
       if(ai.frameTimer >= 1){ ai.frameTimer = 0; ai.frame = (ai.frame + 1) % FRAMES.length; }
       if(ai.dist >= GOAL){
         ai.dist = GOAL;
