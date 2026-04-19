@@ -1590,13 +1590,16 @@ function drawTitle() {
 }
 
 // ========== GAME LOOP ==========
+const TICK_RATE = 30; // game logic runs at 30fps
+const TICK_MS = 1000 / TICK_RATE;
+let lastUpdate = 0;
 function gameLoop(timestamp) {
-  const dt = lastTime ? Math.min((timestamp - lastTime) / (1000 / 120), 3) : 1;
-  lastTime = timestamp;
-  gDt = dt;
-  update(dt);
-  render();
   requestAnimationFrame(gameLoop);
+  if (timestamp - lastUpdate < TICK_MS) { render(); return; }
+  lastUpdate = timestamp;
+  gDt = 1;
+  update(1);
+  render();
 }
 requestAnimationFrame(gameLoop);
 </script>
