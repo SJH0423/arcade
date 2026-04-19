@@ -509,18 +509,18 @@
       const rot = strafe ? 0 : ((leftHeld ? -1 : 0) + (rightHeld ? 1 : 0));
       const str = strafe ? ((leftHeld ? -1 : 0) + (rightHeld ? 1 : 0)) : 0;
       const mov = (keys['ArrowUp'] || keys['KeyW'] || tFw ? 1 : 0) + (keys['ArrowDown'] || keys['KeyS'] || tBk ? -1 : 0);
-      pa += rot * 0.04;
+      pa += rot * 0.06;
       let moved = false;
       if (mov !== 0) {
-        const nx = px + Math.cos(pa) * 0.07 * mov;
-        const ny = py + Math.sin(pa) * 0.07 * mov;
+        const nx = px + Math.cos(pa) * 0.105 * mov;
+        const ny = py + Math.sin(pa) * 0.105 * mov;
         tryMove(nx, ny);
         moved = true;
       }
       if (str !== 0) {
         // Strafe perpendicular to facing: right = (-sin pa, cos pa)
-        const nx = px + (-Math.sin(pa)) * 0.06 * str;
-        const ny = py + (Math.cos(pa)) * 0.06 * str;
+        const nx = px + (-Math.sin(pa)) * 0.09 * str;
+        const ny = py + (Math.cos(pa)) * 0.09 * str;
         tryMove(nx, ny);
         moved = true;
       }
@@ -535,7 +535,7 @@
       // Shooting
       if ((keys['Space'] || tFr) && gunCd <= 0) {
         if (ammo <= 0) { gunCd = 20; snd(100, 0.1, 'square', 0.04); msgText = 'NO AMMO'; msgT = 40; } else {
-          ammo--; gunCd = 18; gunKick = 8; sfxShoot();
+          ammo--; gunCd = 12; gunKick = 6; sfxShoot();
           // Find closest enemy in cone. Cone widens with proximity (close = forgiving).
           let hitE = null, hitD = Infinity;
           for (const e of ene) {
@@ -605,7 +605,7 @@
         if (los && d > 0.5 && d < 7) {
           e.moveT++;
           if (e.moveT % 2 === 0) {
-            const sp = 0.066 + lvl * 0.0075;
+            const sp = 0.099 + lvl * 0.011;
             const mx = (dx / d) * sp, my = (dy / d) * sp;
             const nx = e.x + mx, ny = e.y + my;
             // 4-corner wall check (radius-aware)
