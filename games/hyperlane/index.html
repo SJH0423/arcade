@@ -472,10 +472,12 @@ function draw(){
   }
 }
 
+const TICK_RATE=35,TICK_MS=1000/TICK_RATE;let lastUpdate=0;
 function loop(timestamp){
-  const dt=lastTime?Math.min((timestamp-lastTime)/(1000/60),3):1;
-  lastTime=timestamp;
-  update(dt);draw();requestAnimationFrame(loop);
+  requestAnimationFrame(loop);
+  if(timestamp-lastUpdate<TICK_MS){draw();return;}
+  lastUpdate=timestamp;
+  update(1);draw();
 }
 requestAnimationFrame(loop);
 </script>
