@@ -53,6 +53,7 @@ let spawnT=0,spawnI=80;
 let keys={},tL=false,tR=false,tU=false,tD=false,tF=false;
 let warpStars=[];
 let roadOff=0;
+let lastTime=0;
 
 // Audio
 const AC=new(window.AudioContext||window.webkitAudioContext)();
@@ -104,7 +105,7 @@ function pHit(){
   if(lives<=0){state='gameover';nameChars=['A','A','A'];namePos=0;if(score>hi)hi=score;}
 }
 
-function startGame(){state='playing';initGame();AC.resume();attract=false;attractStartT=Date.now();}
+function startGame(){state='playing';initGame();AC.resume();attract=false;attractStartT=Date.now();lastTime=0;}
 
 // Input
 document.addEventListener('keydown',e=>{
@@ -158,7 +159,7 @@ function submitScore(){
 }
 fetchRanking();
 
-function update(){
+function update(dt){
   // Attract mode
   if(attract){
     if(state==='title'){if(Date.now()-attractStartT>=3000){attractStartT=Date.now();state='ranking';fetchRanking();}}
@@ -169,16 +170,16 @@ function update(){
 
   // Warp stars always animated
   const warpSpd=0.12+(state==='playing'?lvl*0.018:0);
-  for(const s of warpStars){s.z-=warpSpd;if(s.z<=0.2){s.z=3.2;s.x=(Math.random()-0.5)*4;s.y=(Math.random()-0.5)*4;}}
-  roadOff=(roadOff+warpSpd*25)%40;
+  for(const s of warpStars){s.z-=warpSpd*dt;if(s.z<=0.2){s.z=3.2;s.x=(Math.random()-0.5)*4;s.y=(Math.random()-0.5)*4;}}
+  roadOff=(roadOff+warpSpd*25*dt)%40;
 
   if(state!=='playing')return;
 
   // Player movement
-  if(keys['ArrowLeft']||keys['KeyA']||tL){pl.x-=3.5;}
-  if(keys['ArrowRight']||keys['KeyD']||tR){pl.x+=3.5;}
-  if(keys['ArrowUp']||keys['KeyW']||tU){pl.y-=2.5;}
-  if(keys['ArrowDown']||keys['KeyS']||tD){pl.y+=2.5;}
+  if(keys['ArrowLeft']||keys['KeyA']||tL){pl.x-=3.5*dt;}
+  if(keys['ArrowRight']||keys['KeyD']||tR){pl.x+=3.5*dt;}
+  if(keys['ArrowUp']||keys['KeyW']||tU){pl.y-=2.5*dt;}
+  if(keys['ArrowDown']||keys['KeyS']||tD){pl.y+=2.5*dt;}
   pl.x=Math.max(-120,Math.min(120,pl.x));
   pl.y=Math.max(-50,Math.min(50,pl.y));
   if(pl.cd>0)pl.cd--;
@@ -192,7 +193,7 @@ function update(){
 
   // Bullets
   for(let i=bul.length-1;i>=0;i--){
-    const b=bul[i];b.sy+=b.vy;
+    const b=bul[i];b.sy+=b.vy*dt;
     if(b.sy<-20){bul.splice(i,1);continue;}
   }
 
@@ -201,7 +202,7 @@ function update(){
   if(spawnT>=spawnI){spawnT=0;spawnEnemy();spawnI=Math.max(7,18-Math.floor(lvl/2));}
   for(let i=ene.length-1;i>=0;i--){
     const e=ene[i];
-    e.z+=e.vz;
+    e.z+=e.vz*dt;
     updateEnePos(e);
     e.shootCd--;
     if(e.shootCd<=0 && e.scale>0.3 && e.scale<0.85){
@@ -237,7 +238,7 @@ function update(){
 
   // Enemy bullets (screen-space, lerp from spawn to target)
   for(let i=ebul.length-1;i>=0;i--){
-    const b=ebul[i];b.life++;
+    const b=ebul[i];b.life+=dt;
     const p=b.life/b.maxLife;
     if(p>=1){
       const sx=CX+pl.x, sy=SHIP_Y+pl.y*0.3;
@@ -249,7 +250,7 @@ function update(){
   }
 
   // Particles
-  for(let i=ptc.length-1;i>=0;i--){const t=ptc[i];t.x+=t.vx;t.y+=t.vy;t.life--;if(t.life<=0)ptc.splice(i,1);}
+  for(let i=ptc.length-1;i>=0;i--){const t=ptc[i];t.x+=t.vx*dt;t.y+=t.vy*dt;t.life-=dt;if(t.life<=0)ptc.splice(i,1);}
 }
 
 function drawWarpStars(){
@@ -471,8 +472,12 @@ function draw(){
   }
 }
 
-function loop(){update();draw();requestAnimationFrame(loop);}
-loop();
+function loop(timestamp){
+  const dt=lastTime?Math.min((timestamp-lastTime)/(1000/60),3):1;
+  lastTime=timestamp;
+  update(dt);draw();requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
 </script>
 </body>
 </html>
