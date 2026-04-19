@@ -1083,15 +1083,15 @@ function update(dt) {
     updateCanyon();
   }
 
-  if (!inCanyon) {
-    // Update bullets
-    for (let i = bullets.length - 1; i >= 0; i--) {
-      const b = bullets[i];
-      b.x += b.vx * dt; b.y += b.vy * dt;
-      if (b.life !== undefined) { b.life--; if (b.life <= 0) { bullets.splice(i, 1); continue; } }
-      if (b.x > W + 20 || b.x < -20 || b.y < -20 || b.y > H + 20) bullets.splice(i, 1);
-    }
+  // Update player bullets (always, including canyon)
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    if (b.life !== undefined) { b.life--; if (b.life <= 0) { bullets.splice(i, 1); continue; } }
+    if (b.x > W + 20 || b.x < -20 || b.y < -20 || b.y > H + 20) bullets.splice(i, 1);
+  }
 
+  if (!inCanyon) {
     for (let i = enemyBullets.length - 1; i >= 0; i--) {
       const b = enemyBullets[i];
       b.x += b.vx * dt; b.y += b.vy * dt;
@@ -1114,9 +1114,11 @@ function update(dt) {
 
   for (const e of enemies) updateEnemy(e, dt);
 
-  // Bullet-Enemy collision
+  // Bullet-Enemy collision (normal enemies + canyon enemies)
   for (let bi = bullets.length - 1; bi >= 0; bi--) {
     const b = bullets[bi];
+    let hit = false;
+    // Normal enemies
     for (let ei = enemies.length - 1; ei >= 0; ei--) {
       const e = enemies[ei];
       if (rectsOverlap(b, e)) {
@@ -1124,8 +1126,28 @@ function update(dt) {
         e.hp -= b.dmg;
         sfxHit();
         spawnParticles(b.x, b.y, 3, '#ffaa00');
-        if (!b.piercing) { bullets.splice(bi, 1); break; }
+        if (!b.piercing) { bullets.splice(bi, 1); hit = true; break; }
         else if (b.hitTargets) { b.hitTargets.push(e); }
+      }
+    }
+    if (hit) continue;
+    // Canyon enemies
+    if (inCanyon) {
+      for (let ci = cEnemies.length - 1; ci >= 0; ci--) {
+        const e = cEnemies[ci];
+        if (Math.abs(b.x - e.x) < 14 && Math.abs(b.y - e.y) < 10) {
+          e.hp -= (b.dmg || 1);
+          sfxHit();
+          spawnParticles(b.x, b.y, 3, '#ffaa00');
+          if (!b.piercing) { bullets.splice(bi, 1); hit = true; }
+          if (e.hp <= 0) {
+            score += 100;
+            sfxExplode();
+            spawnParticles(e.x, e.y, 8, '#ff4400');
+            cEnemies.splice(ci, 1);
+          } else { e.hurtT = 5; }
+          break;
+        }
       }
     }
   }
@@ -1799,6 +1821,8 @@ function render() {
     drawCanyonWalls();
     drawCanyonEnemies();
     drawCanyonBullets();
+    // Player bullets visible in canyon too
+    for (const b of bullets) drawBullet(b);
   } else {
     // Normal gameplay rendering
     // Items
