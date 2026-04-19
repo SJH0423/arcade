@@ -89,6 +89,15 @@ def get_ranking(game):
     return jsonify([dict(r) for r in rows])
 
 
+@app.route('/api/ranking/<game>', methods=['DELETE'])
+def clear_ranking(game):
+    conn = get_db()
+    conn.execute('DELETE FROM rankings WHERE game=?', (game,))
+    conn.commit()
+    conn.close()
+    return jsonify({'status': 'cleared', 'game': game})
+
+
 @app.route('/api/ranking/<game>', methods=['POST'])
 def add_ranking(game):
     data = request.get_json()
