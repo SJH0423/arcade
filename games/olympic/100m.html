@@ -341,10 +341,10 @@ let aiMetersPerFrame = 100 / (aiTargetTime * TICK_RATE);
 const FORFEIT_DEADLINE_MS = 15000;  // forfeit if player doesn't finish within 15s after AI
 
 const MAX_SPEED = 11;
-const PRESS_GAIN = 0.22;
+const PRESS_GAIN = 0.38;
 const DECAY = 0.11;
 const GOAL = 100;     // meters
-const METERS_PER_SPEED = 0.045;
+const METERS_PER_SPEED = 0.023;
 
 function setRoundAI(roundIdx){
   aiTargetTime = AI_TIMES[roundIdx];
