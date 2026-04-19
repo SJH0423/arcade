@@ -1591,7 +1591,7 @@ function drawTitle() {
 
 // ========== GAME LOOP ==========
 function gameLoop(timestamp) {
-  const dt = lastTime ? Math.min((timestamp - lastTime) / (1000 / 70), 3) : 1;
+  const dt = lastTime ? Math.min((timestamp - lastTime) / (1000 / 86), 3) : 1;
   lastTime = timestamp;
   gDt = dt;
   update(dt);
