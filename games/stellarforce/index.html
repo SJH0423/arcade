@@ -1591,15 +1591,11 @@ function drawTitle() {
 
 // ========== GAME LOOP ==========
 function gameLoop(timestamp) {
-  const dt = lastTime ? Math.min((timestamp - lastTime) / (1000 / 86), 3) : 1;
+  const dt = lastTime ? Math.min((timestamp - lastTime) / (1000 / 120), 3) : 1;
   lastTime = timestamp;
   gDt = dt;
   update(dt);
   render();
-  // DEBUG: show dt value
-  const dctx = document.querySelector('canvas').getContext('2d');
-  dctx.fillStyle='#ff0';dctx.font='14px monospace';
-  dctx.fillText('dt='+dt.toFixed(3)+' fps='+(1000/(timestamp-lastTime+0.001)).toFixed(0), 10, H-10);
   requestAnimationFrame(gameLoop);
 }
 requestAnimationFrame(gameLoop);
