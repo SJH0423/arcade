@@ -304,6 +304,9 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 const W = 800, H = 400;
 
+// Tick rate
+const TICK_RATE=35;
+
 // Audio
 const AC = new (window.AudioContext || window.webkitAudioContext)();
 function snd(f, d, t, v){ const o=AC.createOscillator(),g=AC.createGain(); o.type=t||'square'; o.frequency.value=f; g.gain.setValueAtTime(v||0.08,AC.currentTime); g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+d); o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime+d); }
@@ -949,7 +952,7 @@ function drawFinal(){
   ctx.fillText('PRESS ENTER FOR STADIUM', cx, 336);
 }
 
-const TICK_RATE=35,TICK_MS=1000/TICK_RATE;let lastUpdate=0;
+const TICK_MS=1000/TICK_RATE;let lastUpdate=0;
 function drawCurrent(){
   if(state === 'title') drawTitle();
   else if(state === 'countdown') drawCountdown();
