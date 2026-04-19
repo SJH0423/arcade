@@ -787,8 +787,14 @@ function useBomb() {
   sfxBomb();
   screenShake = 20;
   for (const e of enemies) { e.hp -= 15; spawnExplosion(e.x, e.y, 8); }
+  // Canyon enemies
+  for (const e of cEnemies) { e.hp -= 15; spawnParticles(e.x, e.y, 6, '#ff4400'); }
+  cEnemies = cEnemies.filter(e => { if (e.hp <= 0) { score += 100; sfxExplode(); return false; } return true; });
+  // Clear enemy bullets + canyon bullets
   for (const b of enemyBullets) spawnParticles(b.x, b.y, 3, '#ffff00');
+  for (const b of cBullets.filter(b => b.enemy)) spawnParticles(b.x, b.y, 3, '#ffff00');
   enemyBullets = [];
+  cBullets = cBullets.filter(b => !b.enemy);
   particles.push({ x: W / 2, y: H / 2, life: 20, maxLife: 20, type: 'flash' });
 }
 
