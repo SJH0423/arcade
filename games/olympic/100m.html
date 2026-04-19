@@ -947,28 +947,36 @@ function drawFinal(){
   ctx.fillText('PRESS ENTER FOR STADIUM', cx, 336);
 }
 
+const TICK_RATE=35,TICK_MS=1000/TICK_RATE;let lastUpdate=0;
+function drawCurrent(){
+  if(state === 'title') drawTitle();
+  else if(state === 'countdown') drawCountdown();
+  else if(state === 'racing'){
+    const scrollX = dist * 24;
+    drawTrack(scrollX);drawFinishLine(scrollX);drawRunners();drawHUD();
+  } else if(state === 'roundEnd') drawRoundEnd();
+  else if(state === 'final') drawFinal();
+}
 function loop(timestamp){
-  // deltaTime normalized to 60fps: dt=1.0 at 60fps, capped at 3
-  const dt = lastTime ? Math.min((timestamp - lastTime) / (1000/60), 3) : 1;
-  lastTime = timestamp;
+  requestAnimationFrame(loop);
+  if(timestamp-lastUpdate<TICK_MS){drawCurrent();return;}
+  lastUpdate=timestamp;
 
   if(state === 'racing'){
-    elapsed += dt;
-    speed = Math.max(0, speed - DECAY * dt);
-    dist += speed * METERS_PER_SPEED * dt;
-    flashTimer = Math.max(0, flashTimer - dt);
+    elapsed++;
+    speed = Math.max(0, speed - DECAY);
+    dist += speed * METERS_PER_SPEED;
+    flashTimer = Math.max(0, flashTimer - 1);
 
-    // Player frame anim
-    frameTimer += speed * 0.018 * dt;
+    frameTimer += speed * 0.018;
     if(frameTimer >= 1){
       frameTimer = 0;
       curFrame = (curFrame + 1) % FRAMES.length;
     }
 
-    // AI advance (constant pace, varies per round)
     if(!ai.finished){
-      ai.dist += aiMetersPerFrame * dt;
-      ai.frameTimer += 0.16 * dt;
+      ai.dist += aiMetersPerFrame;
+      ai.frameTimer += 0.16;
       if(ai.frameTimer >= 1){ ai.frameTimer = 0; ai.frame = (ai.frame + 1) % FRAMES.length; }
       if(ai.dist >= GOAL){
         ai.dist = GOAL;
@@ -978,7 +986,6 @@ function loop(timestamp){
       }
     }
 
-    // End condition: player must reach finish line.
     if(dist >= GOAL){
       dist = GOAL;
       const playerWon = !ai.finished;
@@ -987,36 +994,18 @@ function loop(timestamp){
       }
       endRace(playerWon);
     }
-    // Forfeit deadline: if AI finished and player hasn't crossed within FORFEIT_DEADLINE_MS, DQ
     else if(ai.finished && Date.now() - ai.finishedAtMs > FORFEIT_DEADLINE_MS){
-      endRace(false, true);  // forfeit flag
+      endRace(false, true);
     }
   }
 
-  // Auto-advance from roundEnd after 10 seconds
   if(state === 'roundEnd' && Date.now() - roundEndAt > AUTO_ADVANCE_MS){
     startNextRound();
   }
 
-  if(state === 'title'){
-    drawTitle();
-  } else if(state === 'countdown'){
-    drawCountdown();
-  } else if(state === 'racing'){
-    const scrollX = dist * 24;
-    drawTrack(scrollX);
-    drawFinishLine(scrollX);
-    drawRunners();
-    drawHUD();
-  } else if(state === 'roundEnd'){
-    drawRoundEnd();
-  } else if(state === 'final'){
-    drawFinal();
-  }
-
-  requestAnimationFrame(loop);
+  drawCurrent();
 }
-loop();
+requestAnimationFrame(loop);
 </script>
 </body>
 </html>
