@@ -973,7 +973,7 @@ function loop(timestamp){
     dist += speed * METERS_PER_SPEED;
     flashTimer = Math.max(0, flashTimer - 1);
 
-    frameTimer += speed * 0.018;
+    frameTimer += speed * 0.06;
     if(frameTimer >= 1){
       frameTimer = 0;
       curFrame = (curFrame + 1) % FRAMES.length;
