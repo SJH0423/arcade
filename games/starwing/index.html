@@ -52,6 +52,7 @@ let state='title',score=0,hi=0,lives=3,lvl=1;
 let pl=null,bul=[],ene=[],ebul=[],ptc=[],stars=[];
 let fmX=0,fmDir=1,fmSpd=0.3,diveT=0,diveI=120;
 let keys={},tL=false,tR=false,tF=false;
+let lastTime=0;
 
 // Tractor beam state
 let beam=null;
@@ -254,8 +255,8 @@ addT(document.getElementById('tRight'),()=>{tR=true},()=>{tR=false});
 addT(document.getElementById('tFire'),()=>{tF=true;if(state==='title'||state==='ranking'){state='playing';initGame();AC.resume();attract=false;attractStartT=Date.now();}else if(state==='gameover'){submitScore();}},()=>{tF=false});
 canvas.addEventListener('touchstart',()=>{if(state==='title'||state==='ranking'){state='playing';initGame();AC.resume();attract=false;attractStartT=Date.now();}},{passive:true});
 
-function update(){
-  for(const s of stars){s.y+=s.sp;if(s.y>BH){s.y=0;s.x=Math.random()*BW;}}
+function update(dt){
+  for(const s of stars){s.y+=s.sp*dt;if(s.y>BH){s.y=0;s.x=Math.random()*BW;}}
   // Attract mode: auto-rotate title <-> ranking every 3 seconds
   if(attract){
     if(state==='title'){
@@ -272,7 +273,7 @@ function update(){
   if(state!=='playing'){
     // Keep particles updating in gameover for visual effect
     if(state==='gameover'||state==='ranking'){
-      for(let i=ptc.length-1;i>=0;i--){const t=ptc[i];t.x+=t.vx;t.y+=t.vy;t.vx*=0.97;t.vy*=0.97;t.life--;if(t.life<=0)ptc.splice(i,1);}
+      for(let i=ptc.length-1;i>=0;i--){const t=ptc[i];t.x+=t.vx*dt;t.y+=t.vy*dt;t.vx*=Math.pow(0.97,dt);t.vy*=Math.pow(0.97,dt);t.life-=dt;if(t.life<=0)ptc.splice(i,1);}
     }
     return;
   }
@@ -298,7 +299,7 @@ function update(){
     else if(beam.phase===1){
       // Phase 1: Beam expanding - triangle of light growing downward
       boss.x=boss.beamX; boss.y=boss.beamY; // lock boss position
-      beam.height=Math.min(BH-boss.y-30, beam.timer*3);
+      beam.height=Math.min(BH-boss.y-30, beam.height+3*dt);
       beam.width=beam.height*0.7;
 
       // Sound pulses
@@ -322,8 +323,8 @@ function update(){
 
       // Pull player up if capturing
       if(beam.capturing && !p.captured){
-        p.x+=(beam.boss.x-p.x)*0.05; // center player under boss
-        p.y-=1.5; // pull upward
+        p.x+=(beam.boss.x-p.x)*(1-Math.pow(1-0.05,dt)); // center player under boss
+        p.y-=1.5*dt; // pull upward
         if(p.y <= boss.y+30){
           // Captured!
           p.captured=true;
@@ -350,7 +351,7 @@ function update(){
     }
     else if(beam.phase===2){
       // Phase 2: Beam retracting
-      beam.height=Math.max(0, beam.height-5);
+      beam.height=Math.max(0, beam.height-5*dt);
       if(beam.height<=0){
         beam.phase=3; beam.timer=0;
       }
@@ -359,8 +360,8 @@ function update(){
     else if(beam.phase===3){
       // Phase 3: Boss returns to formation
       const tx=boss.fX+fmX, ty=boss.fY;
-      boss.x+=(tx-boss.x)*0.03;
-      boss.y+=(ty-boss.y)*0.03;
+      boss.x+=(tx-boss.x)*(1-Math.pow(1-0.03,dt));
+      boss.y+=(ty-boss.y)*(1-Math.pow(1-0.03,dt));
       if(Math.abs(boss.x-tx)<2 && Math.abs(boss.y-ty)<2){
         boss.x=tx; boss.y=ty;
         boss.div=false;
@@ -371,8 +372,8 @@ function update(){
 
   // Player movement (disabled during capture)
   if(!beam || !beam.capturing || pl.captured){
-    if(keys['ArrowLeft']||keys['KeyA']||tL)p.x-=4;
-    if(keys['ArrowRight']||keys['KeyD']||tR)p.x+=4;
+    if(keys['ArrowLeft']||keys['KeyA']||tL)p.x-=4*dt;
+    if(keys['ArrowRight']||keys['KeyD']||tR)p.x+=4*dt;
     const _fb=fighterBounds();p.x=Math.max(p.w/2-_fb.l,Math.min(BW-p.w/2-_fb.r,p.x));
   }
   if(p.cd>0)p.cd--;
@@ -384,9 +385,9 @@ function update(){
     p.cd=12;sfxShoot();
   }
 
-  for(let i=bul.length-1;i>=0;i--){bul[i].y+=bul[i].vy;if(bul[i].y<-10)bul.splice(i,1);}
+  for(let i=bul.length-1;i>=0;i--){bul[i].y+=bul[i].vy*dt;if(bul[i].y<-10)bul.splice(i,1);}
 
-  fmX+=fmSpd*fmDir;
+  fmX+=fmSpd*fmDir*dt;
   let mnX=999,mxX=-999;
   for(const e of ene){if(!e.div&&!e.ent){const ex=e.fX+fmX;if(ex<mnX)mnX=ex;if(ex>mxX)mxX=ex;}}
   if(mnX<20)fmDir=1;if(mxX>BW-20)fmDir=-1;
@@ -416,18 +417,18 @@ function update(){
   }
 
   for(let i=ene.length-1;i>=0;i--){
-    const e=ene[i];e.aT+=0.05;
+    const e=ene[i];e.aT+=0.05*dt;
 
     // Skip movement if boss is beaming (handled by beam logic)
     if(beam && beam.boss===e && beam.phase>=1 && beam.phase<=2){
       // Boss locked in place by beam logic
     }
-    else if(e.ent){e.y+=e.eSpd;e.x=e.fX+fmX;if(e.y>=e.fY){e.y=e.fY;e.ent=false;}}
+    else if(e.ent){e.y+=e.eSpd*dt;e.x=e.fX+fmX;if(e.y>=e.fY){e.y=e.fY;e.ent=false;}}
     else if(e.div){
-      e.dPh+=0.015;
+      e.dPh+=0.015*dt;
       if(e.dPh<0.5){const t=e.dPh*2;e.x=e.dSX+Math.sin(t*Math.PI*2)*40*e.dDir;e.y=e.fY+t*(BH+40-e.fY);}
-      else if(e.dPh<1){e.y+=e.dSpd;e.x+=Math.sin(e.aT*3)*1.5;if(e.y>BH+30){e.y=-30;e.dPh=1;}}
-      else{const t2=Math.min(1,(e.dPh-1)*3);e.x=e.fX+fmX;e.y=-20+t2*(e.fY+20);if(t2>=1){e.div=false;e.y=e.fY;}e.dPh+=0.015;}
+      else if(e.dPh<1){e.y+=e.dSpd*dt;e.x+=Math.sin(e.aT*3)*1.5*dt;if(e.y>BH+30){e.y=-30;e.dPh=1;}}
+      else{const t2=Math.min(1,(e.dPh-1)*3);e.x=e.fX+fmX;e.y=-20+t2*(e.fY+20);if(t2>=1){e.div=false;e.y=e.fY;}e.dPh+=0.015*dt;}
     }else{e.x=e.fX+fmX;e.y=e.fY+Math.sin(e.aT)*3;}
 
     // Update captured ship position
@@ -485,8 +486,8 @@ function update(){
 
   // Released captured ship flies down to join player
   if(capturedShip && capturedShip.released){
-    capturedShip.y+=capturedShip.vy;
-    capturedShip.x+=(p.x-capturedShip.x)*0.03;
+    capturedShip.y+=capturedShip.vy*dt;
+    capturedShip.x+=(p.x-capturedShip.x)*(1-Math.pow(1-0.03,dt));
 
     // Reached player level - merge into dual fighter!
     if(capturedShip.y >= p.y-5){
@@ -500,7 +501,7 @@ function update(){
   }
 
   for(let i=ebul.length-1;i>=0;i--){
-    const b=ebul[i];b.x+=b.vx;b.y+=b.vy;
+    const b=ebul[i];b.x+=b.vx*dt;b.y+=b.vy*dt;
     if(b.y>BH+10||b.y<-10||b.x<-10||b.x>BW+10){ebul.splice(i,1);continue;}
     if(p.inv<=0){
       let hitIdx=-1;const offs=fighterOffsets();
@@ -517,7 +518,7 @@ function update(){
 
   if(p.inv<=0)for(const e of ene){if(Math.abs(e.x-p.x)<(e.w+p.w)/2*0.7&&Math.abs(e.y-p.y)<(e.h+p.h)/2*0.7){pHit();break;}}
 
-  for(let i=ptc.length-1;i>=0;i--){const t=ptc[i];t.x+=t.vx;t.y+=t.vy;t.vx*=0.97;t.vy*=0.97;t.life--;if(t.life<=0)ptc.splice(i,1);}
+  for(let i=ptc.length-1;i>=0;i--){const t=ptc[i];t.x+=t.vx*dt;t.y+=t.vy*dt;t.vx*=Math.pow(0.97,dt);t.vy*=Math.pow(0.97,dt);t.life-=dt;if(t.life<=0)ptc.splice(i,1);}
 
   if(ene.length===0){lvl++;spawnWave();}
   if(score>hi){hi=score;localStorage.setItem('sHi',hi);}
@@ -869,8 +870,8 @@ function draw(){
   }
 }
 
-function loop(){update();draw();requestAnimationFrame(loop);}
-initStars();loop();
+function loop(timestamp){const dt=lastTime?Math.min((timestamp-lastTime)/(1000/60),3):1;lastTime=timestamp;update(dt);draw();requestAnimationFrame(loop);}
+initStars();requestAnimationFrame(loop);
 </script>
 </body>
 </html>
