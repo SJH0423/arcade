@@ -1596,6 +1596,10 @@ function gameLoop(timestamp) {
   gDt = dt;
   update(dt);
   render();
+  // DEBUG: show dt value
+  const dctx = document.querySelector('canvas').getContext('2d');
+  dctx.fillStyle='#ff0';dctx.font='14px monospace';
+  dctx.fillText('dt='+dt.toFixed(3)+' fps='+(1000/(timestamp-lastTime+0.001)).toFixed(0), 10, H-10);
   requestAnimationFrame(gameLoop);
 }
 requestAnimationFrame(gameLoop);
